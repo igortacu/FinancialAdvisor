@@ -7,10 +7,12 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  ScrollView
+  ScrollView,
 } from 'react-native';
 import api from './api';
+// import AsyncStorage from '@react-native-async-storage/async-storage'; // uncomment if you want token persistence
 
+// API response interfaces
 interface ApiResponse {
   status: string;
   database: string;
@@ -22,30 +24,24 @@ interface RegisterResponse {
   userId: number;
 }
 
+interface LoginResponse {
+  message: string;
+  token: string;
+  user: {
+    id: number;
+    email: string;
+  };
+}
+
 export default function App(): React.ReactElement {
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [connectionStatus, setConnectionStatus] = useState<string>('');
 
-  const testConnection = async (): Promise<void> => {
-    setIsLoading(true);
-    setConnectionStatus('Testing...');
-    
-    try {
-      console.log('Testing connection...');
-      const response = await api.get<ApiResponse>('/health');
-      setConnectionStatus('Connected');
-      Alert.alert('Success', `Server is running: ${response.data.status}`);
-    } catch (error: any) {
-      console.error('Connection error:', error);
-      setConnectionStatus('Failed');
-      Alert.alert('Error', `Cannot connect: ${error.message}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
+
+  // ✅ Register
   const handleRegister = async (): Promise<void> => {
     if (!email.trim() || !password.trim()) {
       Alert.alert('Error', 'Please enter both email and password');
@@ -70,9 +66,9 @@ export default function App(): React.ReactElement {
       console.log('Attempting registration...');
       const response = await api.post<RegisterResponse>('/register', {
         email: email.trim().toLowerCase(),
-        password
+        password,
       });
-      
+
       Alert.alert('Success', response.data.message);
       setEmail('');
       setPassword('');
@@ -80,6 +76,40 @@ export default function App(): React.ReactElement {
       console.error('Registration error:', error);
       const errorMsg = error.response?.data?.error || error.message;
       Alert.alert('Registration Failed', errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ✅ Login
+  const handleLogin = async (): Promise<void> => {
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Error', 'Please enter both email and password');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      console.log('Attempting login...');
+      const response = await api.post<LoginResponse>('/login', {
+        email: email.trim().toLowerCase(),
+        password,
+      });
+
+      Alert.alert('Success', response.data.message);
+
+      // Save JWT for later requests
+      // await AsyncStorage.setItem('token', response.data.token);
+
+      console.log('Logged in user:', response.data.user);
+
+      setEmail('');
+      setPassword('');
+    } catch (error: any) {
+      console.error('Login error:', error);
+      const errorMsg = error.response?.data?.error || error.message;
+      Alert.alert('Login Failed', errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -96,31 +126,20 @@ export default function App(): React.ReactElement {
       {/* Connection Status */}
       <View style={styles.statusContainer}>
         <Text style={styles.statusLabel}>Server Status: </Text>
-        <Text style={[
-          styles.statusText, 
-          connectionStatus === 'Connected' && styles.statusConnected,
-          connectionStatus === 'Failed' && styles.statusFailed
-        ]}>
+        <Text
+          style={[
+            styles.statusText,
+            connectionStatus.includes('Connected') && styles.statusConnected,
+            connectionStatus.includes('Failed') && styles.statusFailed,
+          ]}
+        >
           {connectionStatus || 'Unknown'}
         </Text>
       </View>
 
-      {/* Test Connection Button */}
-      <TouchableOpacity 
-        style={[styles.testButton, isLoading && styles.buttonDisabled]}
-        onPress={testConnection}
-        disabled={isLoading}
-      >
-        {isLoading ? (
-          <ActivityIndicator color="#fff" size="small" />
-        ) : (
-          <Text style={styles.buttonText}>Test Server Connection</Text>
-        )}
-      </TouchableOpacity>
-
-      {/* Registration Form */}
+      {/* Auth Form */}
       <View style={styles.formContainer}>
-        <Text style={styles.formTitle}>Create Account</Text>
+        <Text style={styles.formTitle}>Account</Text>
 
         <TextInput
           style={styles.input}
@@ -146,11 +165,12 @@ export default function App(): React.ReactElement {
           editable={!isLoading}
         />
 
-        <TouchableOpacity 
+        {/* Register Button */}
+        <TouchableOpacity
           style={[
-            styles.registerButton, 
+            styles.registerButton,
             isLoading && styles.buttonDisabled,
-            (!email || !password) && styles.buttonDisabled
+            (!email || !password) && styles.buttonDisabled,
           ]}
           onPress={handleRegister}
           disabled={isLoading || !email || !password}
@@ -159,6 +179,23 @@ export default function App(): React.ReactElement {
             <ActivityIndicator color="#fff" size="small" />
           ) : (
             <Text style={styles.buttonText}>Create Account</Text>
+          )}
+        </TouchableOpacity>
+
+        {/* Login Button */}
+        <TouchableOpacity
+          style={[
+            styles.loginButton,
+            isLoading && styles.buttonDisabled,
+            (!email || !password) && styles.buttonDisabled,
+          ]}
+          onPress={handleLogin}
+          disabled={isLoading || !email || !password}
+        >
+          {isLoading ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.buttonText}>Login</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -272,6 +309,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 10,
     shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  loginButton: {
+    backgroundColor: '#3b82f6',
+    paddingVertical: 18,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 10,
+    shadowColor: '#3b82f6',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
