@@ -189,7 +189,7 @@ process.on('SIGINT', () => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 API server running on http://localhost:${PORT}`);
-  console.log(`📋 Health check: http://localhost:${PORT}/health`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 API server running on http://0.0.0.0:${PORT}`);
+  console.log(`📋 Health check: http://192.168.1.33:${PORT}/health`);
 });
