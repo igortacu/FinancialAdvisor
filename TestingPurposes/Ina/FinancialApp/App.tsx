@@ -11,11 +11,15 @@ import {
 } from 'react-native';
 import { supabase } from './api'; 
 
+type Screen = 'welcome' | 'register' | 'login';
+
 export default function App(): React.ReactElement {
+  const [screen, setScreen] = useState<Screen>('welcome');
+
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
-  const [name, setName] = useState<string>(''); // ✅ Name field
-  const [surname, setSurname] = useState<string>(''); // ✅ Surname field
+  const [name, setName] = useState<string>(''); 
+  const [surname, setSurname] = useState<string>(''); 
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   // ✅ Register with Supabase
@@ -24,37 +28,33 @@ export default function App(): React.ReactElement {
       Alert.alert('Error', 'Please enter email, password, name, and surname');
       return;
     }
-
     if (password.length < 6) {
       Alert.alert('Error', 'Password must be at least 6 characters long');
       return;
     }
 
     setIsLoading(true);
-
     try {
-      console.log('Attempting registration...');
       const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
       });
-
       if (error) throw error;
 
-      // Optionally, insert name and surname into a "profiles" table
+      // Insert into profiles table
       const { error: profileError } = await supabase
         .from('profiles')
         .insert([{ id: data.user?.id, name: name.trim(), surname: surname.trim() }]);
 
       if (profileError) throw profileError;
 
-      Alert.alert('Success', 'Account created! Please check your email for confirmation.');
+      Alert.alert('Success', 'Account created! Please check your email.');
       setEmail('');
       setPassword('');
       setName('');
       setSurname('');
+      setScreen('welcome'); // go back to welcome
     } catch (error: any) {
-      console.error('Registration error:', error);
       Alert.alert('Registration Failed', error.message);
     } finally {
       setIsLoading(false);
@@ -69,14 +69,11 @@ export default function App(): React.ReactElement {
     }
 
     setIsLoading(true);
-
     try {
-      console.log('Attempting login...');
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
       });
-
       if (error) throw error;
 
       Alert.alert('Success', 'Logged in successfully!');
@@ -84,8 +81,8 @@ export default function App(): React.ReactElement {
 
       setEmail('');
       setPassword('');
+      setScreen('welcome');
     } catch (error: any) {
-      console.error('Login error:', error);
       Alert.alert('Login Failed', error.message);
     } finally {
       setIsLoading(false);
@@ -100,93 +97,129 @@ export default function App(): React.ReactElement {
         <Text style={styles.subtitle}>Manage your finances with ease</Text>
       </View>
 
-      {/* Auth Form */}
+      {/* Screens */}
       <View style={styles.formContainer}>
-        <Text style={styles.formTitle}>Account</Text>
+        {screen === 'welcome' && (
+          <>
+            <Text style={styles.formTitle}>Welcome</Text>
+            <TouchableOpacity
+              style={styles.registerButton}
+              onPress={() => setScreen('register')}
+            >
+              <Text style={styles.buttonText}>Register</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.loginButton}
+              onPress={() => setScreen('login')}
+            >
+              <Text style={styles.buttonText}>Login</Text>
+            </TouchableOpacity>
+          </>
+        )}
 
-        {/* Name and Surname only for registration */}
-        <TextInput
-          style={styles.input}
-          placeholder="Name"
-          placeholderTextColor="#999"
-          value={name}
-          onChangeText={setName}
-          autoCapitalize="words"
-          editable={!isLoading}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Surname"
-          placeholderTextColor="#999"
-          value={surname}
-          onChangeText={setSurname}
-          autoCapitalize="words"
-          editable={!isLoading}
-        />
+        {screen === 'register' && (
+          <>
+            <Text style={styles.formTitle}>Create Account</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Name"
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
+              editable={!isLoading}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Surname"
+              value={surname}
+              onChangeText={setSurname}
+              autoCapitalize="words"
+              editable={!isLoading}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!isLoading}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Password (min 6 characters)"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoCapitalize="none"
+              editable={!isLoading}
+            />
+            <TouchableOpacity
+              style={[styles.registerButton, isLoading && styles.buttonDisabled]}
+              onPress={handleRegister}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.buttonText}>Create Account</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.loginButton}
+              onPress={() => setScreen('welcome')}
+            >
+              <Text style={styles.buttonText}>Back</Text>
+            </TouchableOpacity>
+          </>
+        )}
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#999"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={!isLoading}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Password (min 6 characters)"
-          placeholderTextColor="#999"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={!isLoading}
-        />
-
-        {/* Register Button */}
-        <TouchableOpacity
-          style={[
-            styles.registerButton,
-            isLoading && styles.buttonDisabled,
-            (!email || !password || !name || !surname) && styles.buttonDisabled,
-          ]}
-          onPress={handleRegister}
-          disabled={isLoading || !email || !password || !name || !surname}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={styles.buttonText}>Create Account</Text>
-          )}
-        </TouchableOpacity>
-
-        {/* Login Button */}
-        <TouchableOpacity
-          style={[
-            styles.loginButton,
-            isLoading && styles.buttonDisabled,
-            (!email || !password) && styles.buttonDisabled,
-          ]}
-          onPress={handleLogin}
-          disabled={isLoading || !email || !password}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={styles.buttonText}>Login</Text>
-          )}
-        </TouchableOpacity>
+        {screen === 'login' && (
+          <>
+            <Text style={styles.formTitle}>Login</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              editable={!isLoading}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoCapitalize="none"
+              editable={!isLoading}
+            />
+            <TouchableOpacity
+              style={[styles.loginButton, isLoading && styles.buttonDisabled]}
+              onPress={handleLogin}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.buttonText}>Login</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.registerButton}
+              onPress={() => setScreen('welcome')}
+            >
+              <Text style={styles.buttonText}>Back</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </ScrollView>
   );
 }
 
-// Keep your styles the same
 const styles = StyleSheet.create({
   container: { flexGrow: 1, backgroundColor: '#f5f7fa', paddingTop: 50 },
   header: { backgroundColor: '#2563eb', paddingVertical: 40, paddingHorizontal: 20, marginBottom: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
