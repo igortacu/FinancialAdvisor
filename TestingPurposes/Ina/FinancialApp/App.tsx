@@ -9,49 +9,17 @@ import {
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
-import api from './api';
-// import AsyncStorage from '@react-native-async-storage/async-storage'; // uncomment if you want token persistence
-
-// API response interfaces
-interface ApiResponse {
-  status: string;
-  database: string;
-  timestamp: string;
-}
-
-interface RegisterResponse {
-  message: string;
-  userId: number;
-}
-
-interface LoginResponse {
-  message: string;
-  token: string;
-  user: {
-    id: number;
-    email: string;
-  };
-}
+import { supabase } from './api'; 
 
 export default function App(): React.ReactElement {
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [connectionStatus, setConnectionStatus] = useState<string>('');
 
-
-
-  // ✅ Register
+  // ✅ Register with Supabase
   const handleRegister = async (): Promise<void> => {
     if (!email.trim() || !password.trim()) {
       Alert.alert('Error', 'Please enter both email and password');
-      return;
-    }
-
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
       return;
     }
 
@@ -64,24 +32,25 @@ export default function App(): React.ReactElement {
 
     try {
       console.log('Attempting registration...');
-      const response = await api.post<RegisterResponse>('/register', {
+      const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
       });
 
-      Alert.alert('Success', response.data.message);
+      if (error) throw error;
+
+      Alert.alert('Success', 'Account created! Please check your email for confirmation.');
       setEmail('');
       setPassword('');
     } catch (error: any) {
       console.error('Registration error:', error);
-      const errorMsg = error.response?.data?.error || error.message;
-      Alert.alert('Registration Failed', errorMsg);
+      Alert.alert('Registration Failed', error.message);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ✅ Login
+  // ✅ Login with Supabase
   const handleLogin = async (): Promise<void> => {
     if (!email.trim() || !password.trim()) {
       Alert.alert('Error', 'Please enter both email and password');
@@ -92,24 +61,21 @@ export default function App(): React.ReactElement {
 
     try {
       console.log('Attempting login...');
-      const response = await api.post<LoginResponse>('/login', {
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
       });
 
-      Alert.alert('Success', response.data.message);
+      if (error) throw error;
 
-      // Save JWT for later requests
-      // await AsyncStorage.setItem('token', response.data.token);
-
-      console.log('Logged in user:', response.data.user);
+      Alert.alert('Success', 'Logged in successfully!');
+      console.log('Logged in user:', data.user);
 
       setEmail('');
       setPassword('');
     } catch (error: any) {
       console.error('Login error:', error);
-      const errorMsg = error.response?.data?.error || error.message;
-      Alert.alert('Login Failed', errorMsg);
+      Alert.alert('Login Failed', error.message);
     } finally {
       setIsLoading(false);
     }
@@ -121,20 +87,6 @@ export default function App(): React.ReactElement {
       <View style={styles.header}>
         <Text style={styles.title}>Financial Advisor</Text>
         <Text style={styles.subtitle}>Manage your finances with ease</Text>
-      </View>
-
-      {/* Connection Status */}
-      <View style={styles.statusContainer}>
-        <Text style={styles.statusLabel}>Server Status: </Text>
-        <Text
-          style={[
-            styles.statusText,
-            connectionStatus.includes('Connected') && styles.statusConnected,
-            connectionStatus.includes('Failed') && styles.statusFailed,
-          ]}
-        >
-          {connectionStatus || 'Unknown'}
-        </Text>
       </View>
 
       {/* Auth Form */}
@@ -228,50 +180,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#ddd',
     textAlign: 'center',
-  },
-  statusContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 15,
-    backgroundColor: '#fff',
-    marginHorizontal: 20,
-    marginBottom: 20,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  statusLabel: {
-    fontSize: 16,
-    color: '#666',
-  },
-  statusText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#666',
-  },
-  statusConnected: {
-    color: '#10b981',
-  },
-  statusFailed: {
-    color: '#ef4444',
-  },
-  testButton: {
-    backgroundColor: '#3b82f6',
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    borderRadius: 10,
-    marginHorizontal: 20,
-    marginBottom: 30,
-    alignItems: 'center',
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
   },
   formContainer: {
     backgroundColor: '#fff',
