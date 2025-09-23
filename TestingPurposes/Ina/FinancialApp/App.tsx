@@ -14,7 +14,6 @@ import {
 import { supabase } from "./api";
 import * as WebBrowser from "expo-web-browser";
 import * as Google from "expo-auth-session/providers/google";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type Screen = "welcome" | "register" | "login" | "Sign in with Google";
 WebBrowser.maybeCompleteAuthSession();
@@ -59,7 +58,7 @@ export default function App(): React.ReactElement {
         headers: { Authorization: `Bearer ${token}` },
       });
       const user = await res.json();
-      await AsyncStorage.setItem("@user", JSON.stringify(user));
+  
       setUserInfo(user);
     } catch (err) {
       console.error("Error fetching user info:", err);
@@ -214,7 +213,6 @@ async function saveUserToSupabase(userInfo: any) {
         <Button
           title="Logout"
           onPress={async () => {
-            await AsyncStorage.removeItem("@user");
             setUserInfo(null);
           }}
         />
