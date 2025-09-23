@@ -27,7 +27,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "scheme": "financialadvisor",
+    "scheme": "com.Finance.FinancialApp",
     "plugins": [
       "expo-web-browser"
     ],
