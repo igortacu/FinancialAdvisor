@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { View, Pressable, StyleSheet, Platform, Text } from "react-native";
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { BlurView } from "expo-blur";
@@ -20,11 +20,19 @@ const ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
   investments: "briefcase",
 };
 
-const BAR_H = 58;
-const CENTER = 60;
-const SLOT = 64;
+const ORDER = [
+  "index",
+  "insights",
+  "transactions",
+  "analytics",
+  "investments",
+] as const;
 
-// Small item with spring handled in useEffect (no writes in render)
+const BAR_H = 52; // smaller
+const CENTER = 56; // smaller
+const SLOT = 56; // smaller
+const RADIUS = 16;
+
 function DockItem({
   icon,
   focused,
@@ -52,7 +60,7 @@ function DockItem({
       <Animated.View style={a}>
         <Ionicons
           name={icon}
-          size={22}
+          size={20}
           color={focused ? "#246BFD" : "#9DA3AF"}
         />
       </Animated.View>
@@ -65,7 +73,16 @@ export default function CompactDock({
   descriptors,
   navigation,
 }: BottomTabBarProps) {
-  const centerIdx = Math.floor(state.routes.length / 2);
+  // Only the 5 we want, in fixed order
+  const routes = useMemo(
+    () =>
+      ORDER.map((name) => state.routes.find((r) => r.name === name)).filter(
+        (r): r is (typeof state.routes)[number] => !!r,
+      ),
+    [state.routes],
+  );
+
+  const centerIdx = 2; // transactions
   const [hint, setHint] = useState<string | null>(null);
 
   const onPressTab = (routeKey: string, name: string, focused: boolean) => {
@@ -79,28 +96,26 @@ export default function CompactDock({
     setTimeout(() => setHint(null), 800);
   };
 
-  // Center button scale handled in effect too
   const centerScale = useSharedValue(1);
   const centerAnim = useAnimatedStyle(
     () => ({ transform: [{ scale: centerScale.value }] }),
     [],
   );
-
   useEffect(() => {
-    const focused = state.index === centerIdx;
+    const focused = state.routes[state.index]?.name === ORDER[centerIdx];
     centerScale.value = withSpring(focused ? 1.06 : 1, { damping: 14 });
   }, [state.index]);
 
-  const left = state.routes.slice(0, centerIdx);
-  const right = state.routes.slice(centerIdx + 1);
-  const center = state.routes[centerIdx];
+  const left = routes.slice(0, centerIdx);
+  const right = routes.slice(centerIdx + 1);
+  const center = routes[centerIdx];
 
   return (
     <View style={[s.wrap, { pointerEvents: "box-none" as any }]}>
       <View style={s.dock}>
         {Platform.OS === "ios" ? (
           <BlurView
-            intensity={28}
+            intensity={22}
             tint="light"
             style={StyleSheet.absoluteFill}
           />
@@ -113,10 +128,9 @@ export default function CompactDock({
           />
         )}
 
-        {/* Left group */}
         <View style={s.sideGroup}>
           {left.map((route) => {
-            const focused = state.routes[state.index].key === route.key;
+            const focused = state.routes[state.index]?.key === route.key;
             const icon = ICON[route.name] ?? "ellipse";
             return (
               <DockItem
@@ -129,42 +143,39 @@ export default function CompactDock({
           })}
         </View>
 
-        {/* Center */}
-        {(() => {
-          const focused = state.routes[state.index].key === center.key;
-          const icon = ICON[center.name] ?? "ellipse";
-          return (
-            <Pressable
-              onPress={() => onPressTab(center.key, center.name, focused)}
-              style={s.centerSlot}
-              hitSlop={10}
-            >
-              <Animated.View style={[s.centerBtn, centerAnim]}>
-                <LinearGradient
-                  colors={["#3bb2f6", "#5b76f7"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={StyleSheet.absoluteFill}
-                />
-                <Ionicons name={icon} size={22} color="#fff" />
-              </Animated.View>
-              {hint === center.name && (
-                <Animated.Text
-                  entering={FadeIn}
-                  exiting={FadeOut}
-                  style={s.centerHint}
-                >
-                  {descriptors[center.key]?.options?.title ?? center.name}
-                </Animated.Text>
-              )}
-            </Pressable>
-          );
-        })()}
+        {!!center && (
+          <Pressable
+            onPress={() => {
+              const focused = state.routes[state.index]?.key === center.key;
+              onPressTab(center.key, center.name, focused);
+            }}
+            style={s.centerSlot}
+            hitSlop={10}
+          >
+            <Animated.View style={[s.centerBtn, centerAnim]}>
+              <LinearGradient
+                colors={["#3bb2f6", "#5b76f7"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <Ionicons name="list" size={20} color="#fff" />
+            </Animated.View>
+            {hint === center.name && (
+              <Animated.Text
+                entering={FadeIn}
+                exiting={FadeOut}
+                style={s.centerHint}
+              >
+                {descriptors[center.key]?.options?.title ?? center.name}
+              </Animated.Text>
+            )}
+          </Pressable>
+        )}
 
-        {/* Right group */}
         <View style={s.sideGroup}>
           {right.map((route) => {
-            const focused = state.routes[state.index].key === route.key;
+            const focused = state.routes[state.index]?.key === route.key;
             const icon = ICON[route.name] ?? "ellipse";
             return (
               <DockItem
@@ -188,32 +199,32 @@ const s = StyleSheet.create({
     right: 0,
     bottom: 0,
     alignItems: "center",
-    paddingBottom: 8,
+    paddingBottom: 6,
   },
   dock: {
     height: BAR_H,
-    marginHorizontal: 16,
-    borderRadius: 18,
+    marginHorizontal: 12,
+    borderRadius: RADIUS,
     overflow: "hidden",
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    columnGap: 6,
+    columnGap: 4,
     ...(Platform.OS === "web"
-      ? { boxShadow: "0px 8px 16px rgba(0,26,77,0.08)" as any }
+      ? { boxShadow: "0px 6px 14px rgba(0,26,77,0.08)" as any }
       : {
           shadowColor: "#001a4d",
           shadowOpacity: 0.08,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 8 },
-          elevation: 6,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 5,
         }),
   },
-  sideGroup: { flexDirection: "row", gap: 6 },
+  sideGroup: { flexDirection: "row" },
   slot: { height: BAR_H, alignItems: "center", justifyContent: "center" },
   centerSlot: {
-    width: CENTER + 10,
+    width: CENTER + 8,
     alignItems: "center",
     justifyContent: "flex-start",
   },
@@ -223,19 +234,19 @@ const s = StyleSheet.create({
     borderRadius: CENTER / 2,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: -18,
+    marginTop: -14,
     ...(Platform.OS === "web"
       ? { boxShadow: "0px 10px 18px rgba(36,107,253,0.35)" as any }
       : {
           shadowColor: "#246BFD",
-          shadowOpacity: 0.35,
+          shadowOpacity: 0.32,
           shadowRadius: 12,
           shadowOffset: { width: 0, height: 8 },
           elevation: 8,
         }),
   },
   centerHint: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
     color: "#111827",
     marginTop: 2,
