@@ -11,7 +11,7 @@ export default function ScanFab() {
     <View pointerEvents="box-none" style={s.overlay}>
       <Animated.View entering={FadeInUp.duration(220)} style={s.wrap}>
         <Pressable
-          onPress={() => router.push("/scan-receipt")}
+          onPress={() => router.push("/transactions")}
           hitSlop={12}
           style={s.hit}
         >

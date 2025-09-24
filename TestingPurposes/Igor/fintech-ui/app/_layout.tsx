@@ -27,10 +27,6 @@ export default function RootLayout() {
             name="modal"
             options={{ presentation: "modal", title: "Modal" }}
           />
-          <Stack.Screen
-            name="scan-receipt"
-            options={{ presentation: "modal" }}
-          />
         </Stack>
         <StatusBar style="auto" />
       </AuthProvider>
