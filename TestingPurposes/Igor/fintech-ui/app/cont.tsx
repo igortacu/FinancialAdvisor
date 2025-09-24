@@ -1,4 +1,6 @@
 import React, { useState ,ReactNode}  from "react";
+import { LinearGradient } from "expo-linear-gradient";
+
 import {
   View,
   Text,
@@ -82,15 +84,34 @@ const spendingOptions: { key: keyof Spending; label: string }[] = [
     title,
     onPress,
     variant = "primary",
-  }) => (
+  }) => {
+  if (variant === "primary") {
+    // Gradient wrapper for primary
+    return (
+      <TouchableOpacity onPress={onPress} style={styles.btnWrapper}>
+        <LinearGradient
+          colors={["#8783f0ff","#2e27bbff", "#6366F1"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[styles.btn, styles.btnPrimary]}
+        >
+          <Text style={[styles.btnText, styles.btnText]}>
+            {title}
+          </Text>
+        </LinearGradient>
+      </TouchableOpacity>
+    );
+  }
+
+  // Non-gradient buttons
+  return (
     <TouchableOpacity
+      onPress={onPress}
       style={[
         styles.btn,
-        variant === "primary" && styles.btnPrimary,
         variant === "secondary" && styles.btnIndigo,
         variant === "ghost" && styles.btnGhost,
       ]}
-      onPress={onPress}
     >
       <Text
         style={[
@@ -102,14 +123,20 @@ const spendingOptions: { key: keyof Spending; label: string }[] = [
       </Text>
     </TouchableOpacity>
   );
-
+};
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.scroll}>
       <View style={styles.heroWrap}>
         <Text style={styles.title}>Creating Your Budget</Text>
         <Text style={styles.subtitle}>Step {step} of 4</Text>
       </View>
-
+        <View style={styles.headerNav}>
+  {step > 1 && (
+    <TouchableOpacity onPress={prevStep} style={styles.backArrow}>
+      <Ionicons name="chevron-back" size={24} color="#111827" />
+    </TouchableOpacity>
+  )}
+</View>
       <View style={styles.card}>
         {step === 1 && (
             <>
@@ -211,7 +238,6 @@ const spendingOptions: { key: keyof Spending; label: string }[] = [
     ))}
 
     <StyledButton title="Next" onPress={nextStep} />
-    <StyledButton title="Back" variant="secondary" onPress={prevStep} />
   </>
 )}
 
@@ -247,7 +273,6 @@ const spendingOptions: { key: keyof Spending; label: string }[] = [
     ))}
     {/* Navigation */}
     <StyledButton title="Next" onPress={nextStep} />
-    <StyledButton title="Back" variant="ghost" onPress={prevStep} />
   </>
 )}
 {step === 4 && (
@@ -257,25 +282,22 @@ const spendingOptions: { key: keyof Spending; label: string }[] = [
     {/* Goals Slider */}
   <Text style={styles.label}>Goal allocation</Text>
 <View style={styles.goalButtonsContainer}>
-  {["Saving", "Mid", "Spending"].map((goalOption) => (
-    <TouchableOpacity
-      key={goalOption}
-      style={[
-        styles.goalButton,
-        formData.goals === goalOption && styles.goalButtonSelected,
-      ]}
-      onPress={() => setFormData({ ...formData, goals: goalOption })}
-    >
-      <Text
-        style={[
-          styles.goalButtonText,
-          formData.goals === goalOption && styles.goalButtonTextSelected,
-        ]}
+  {["Saving", "Mid", "Spending"].map((goalOption) => {
+    const selected = formData.goals === goalOption;
+    return (
+      <TouchableOpacity
+        key={goalOption}
+        style={[styles.goalButton, selected && styles.goalButtonSelected]}
+        onPress={() => setFormData({ ...formData, goals: goalOption })}
       >
-        {goalOption}
-      </Text>
-    </TouchableOpacity>
-  ))}
+        <Text
+          style={[styles.goalButtonText, selected && styles.goalButtonTextSelected]}
+        >
+          {goalOption}
+        </Text>
+      </TouchableOpacity>
+    );
+  })}
 </View>
 <Text style={styles.rangeText}>Current: {formData.goals}</Text>
 
@@ -310,22 +332,17 @@ const spendingOptions: { key: keyof Spending; label: string }[] = [
 
     {/* Navigation */}
     <StyledButton title="Next" onPress={nextStep} />
-    <StyledButton title="Back" variant="ghost" onPress={prevStep} />
   </>
 )}
                        {/* <Text style={styles.confirmBox}>
                 {JSON.stringify(formData, null, 2)}
                 </Text> */}       
     {step === 5 && (
-          <>
-
             <StyledButton
               title="Confirm"
               variant="primary"
               onPress={() => alert("Submitted")}
             />
-            <StyledButton title="Back" variant="ghost" onPress={prevStep} />
-          </>
         )}
       </View>
     </ScrollView>
@@ -333,166 +350,223 @@ const spendingOptions: { key: keyof Spending; label: string }[] = [
 }
 
 const styles = StyleSheet.create({
+  // ===== Layout =====
   screen: {
     flex: 1,
-    backgroundColor: "#ffffff", // pure white background
+    backgroundColor: "#F9FAFB", // light cosmic base
   },
   scroll: {
     paddingTop: 80,
     paddingBottom: 120,
     paddingHorizontal: 20,
   },
-  container: {
-    padding: 20,
-    backgroundColor: "#ffffff", // white card look
-    borderRadius: 16,
-    marginVertical: 10,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.08)", // subtle border
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#111827", // dark text for contrast
-    textAlign: "center",
-    marginBottom: 12,
-  },
-  sliderLabel: {
-    fontSize: 14,
-    color: "#374151", // softer gray for subtext
-    textAlign: "center",
-    marginTop: 10,
-  },
+
+  // ===== Hero / Headers =====
   heroWrap: {
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 24,
   },
   title: {
     fontSize: 28,
     fontWeight: "800",
-    color: "#111827", // bold dark title
+    color: "#111827",
     textAlign: "center",
   },
   subtitle: {
     fontSize: 15,
-    color: "#6b7280", // lighter gray for subtitle
-    marginTop: 5,
+    color: "#6B7280",
+    marginTop: 6,
     textAlign: "center",
   },
+headerNav: {
+  position: "absolute",
+  top: 50, // adjust depending on your padding
+  left: 20,
+  zIndex: 10,
+},
+backArrow: {
+  padding: 6, // gives touch area without a bulky button
+  borderRadius: 20,
+  backgroundColor: "rgba(0,0,0,0.04)", // faint circle background
+},
+  // ===== Card =====
   card: {
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: 24,
+    padding: 22,
+    backgroundColor: "#fff",
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.08)",
-    backgroundColor: "#ffffff",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 3,
+    borderColor: "rgba(99,102,241,0.08)", // soft indigo border
+    shadowColor: "#4F46E5",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   },
+
+  // ===== Inputs =====
   inputWrap: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f9fafb", // light input background
-    borderRadius: 12,
+    backgroundColor: "#fff",
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.25)",
-    paddingHorizontal: 12,
-    marginBottom: 12,
-    height: 50,
+    borderColor: "rgba(99,102,241,0.2)",
+    paddingHorizontal: 14,
+    marginBottom: 14,
+    height: 52,
     shadowColor: "#000",
-    shadowOpacity: 0.03,
+    shadowOpacity: 0.04,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
   input: {
     flex: 1,
     fontSize: 16,
-    color: "rgba(15, 14, 14, 1)",
+    color: "#111827",
   },
+
+  // ===== Labels =====
+  container: {
+    padding: 20,
+    borderRadius: 18,
+    backgroundColor: "#fff",
+    marginVertical: 12,
+    borderWidth: 1,
+    borderColor: "rgba(99,102,241,0.15)",
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111827",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  rangeText: {
+    textAlign: "center",
+    marginVertical: 8,
+    fontSize: 16,
+    color: "#374151",
+  },
+
+  // ===== Buttons =====
   btn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 10,
+    paddingVertical: 15,
+    borderRadius: 14,
+    marginTop: 12,
+  },
+    btnWrapper: {
+    marginVertical: 8,
+    borderRadius: 14,
+    overflow: "hidden", // ensures gradient corners are rounded
   },
   btnPrimary: {
-    backgroundColor: "#4f46e5",
-    paddingVertical: 16,
-    borderRadius: 16,
-    shadowColor: "#4f46e5",
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
+    backgroundColor: "linear-gradient(90deg, #4F46E5, #6366F1)", // handled with expo-linear-gradient wrapper
+    shadowColor: "#4F46E5",
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
     elevation: 5,
   },
   btnIndigo: {
-    backgroundColor: "#6366f1",
-    shadowColor: "#6366f1",
-    shadowOpacity: 0.2,
+    backgroundColor: "#bdbef7ff",
+    shadowColor: "#6366F1",
+    color: "#494cf5ff",
+    shadowOpacity: 0.25,
     shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
   btnText: {
-    color: "#ffffff",
-    fontWeight: "700",
     fontSize: 16,
+    fontWeight: "700",
+    color: "#fff",
   },
-  btnGhost: {
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "#6366f1",
-  },
-  btnGhostText: {
-    color: "#6366f1",
-  },
-  confirmBox: {
-    color: "#111827",
-    fontSize: 14,
-    marginBottom: 10,
-    backgroundColor: "#f3f4f6", // subtle light gray for contrast
-    padding: 10,
-    borderRadius: 10,
-  },
-// Goals
-goalButtonsContainer: { flexDirection: "row", justifyContent: "space-between", marginVertical: 10 },
+btnGhost: {
+  backgroundColor: "transparent",
+  borderWidth: 1.2,
+  borderColor: "#D1D5DB", // soft neutral grey (Tailwind's gray-300)
+},
+
+btnGhostText: {
+  color: "#374151", // dark neutral grey (Tailwind's gray-700)
+  fontWeight: "600",
+},
+
+  // ===== Goals =====
+  goalButtonsContainer: {
+  flexDirection: "row",
+  backgroundColor: "#E5E7EB", // light grey background
+  borderRadius: 999,
+  padding: 4,
+  marginTop: 12,
+},
+
 goalButton: {
   flex: 1,
-  padding: 12,
-  marginHorizontal: 5,
-  borderRadius: 10,
-  borderWidth: 1,
-  borderColor: "#ccc",
   alignItems: "center",
-  backgroundColor: "#fff",
+  justifyContent: "center",
+  paddingVertical: 10,
+  borderRadius: 999,
 },
+
 goalButtonSelected: {
-  backgroundColor: "#4f46e5",
-  borderColor: "#4f46e5",
+  backgroundColor: "#fff",
+  shadowColor: "#000",
+  shadowOpacity: 0.05,
+  shadowOffset: { width: 0, height: 1 },
+  shadowRadius: 2,
+  elevation: 1,
 },
-goalButtonText: { color: "#000", fontWeight: "600" },
-goalButtonTextSelected: { color: "#fff" },
 
-// Priorities
-  rangeText: { textAlign: "center", marginVertical: 5, fontSize: 16 },
-optionButton: {
-  padding: 10,
-  borderRadius: 20,
-  borderWidth: 1,
-  borderColor: "#ccc",
-  marginVertical: 5,
-  alignItems: "center",
+goalButtonText: {
+  fontSize: 14,
+  fontWeight: "600",
+  color: "#374151", // gray-700
 },
-optionSelected: { backgroundColor: "#4f46e5", borderColor: "#4f46e5" },
-optionText: { color: "#000" },
-optionTextSelected: { color: "#fff" },
+
+goalButtonTextSelected: {
+  color: "#111827", // gray-900
+},
+
+
+  // ===== Priorities =====
+  optionButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginVertical: 6,
+    alignItems: "center",
+    backgroundColor: "#fff",
+  },
+  optionSelected: {
+    backgroundColor: "#4F46E5",
+    borderColor: "#4F46E5",
+    shadowColor: "#4F46E5",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  optionText: {
+    color: "#111827",
+    fontWeight: "500",
+  },
+  optionTextSelected: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+
+  // ===== Confirm Box (debug) =====
+  confirmBox: {
+    backgroundColor: "#F3F4F6",
+    color: "#111827",
+    fontSize: 14,
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 12,
+  },
 });
-
