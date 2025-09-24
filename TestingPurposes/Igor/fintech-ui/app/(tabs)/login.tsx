@@ -110,8 +110,8 @@ async function saveUserToSupabase(userInfo: any) {
   }
 }
   const handleRegister = async (): Promise<void> => {
-    if (!email.trim() || !password.trim() || !name.trim() || !surname.trim()) {
-      Alert.alert("Error", "Please enter email, password, name, and surname");
+    if (!email.trim() || !password.trim()) {
+      Alert.alert("Error", "Please enter email and password");
       return;
     }
     if (password.length < 6) {
@@ -127,21 +127,20 @@ async function saveUserToSupabase(userInfo: any) {
       });
       if (error) throw error;
 
-      // Insert into profiles table
-      const { error: profileError } = await supabase.from("profiles").insert([
-        { id: data.user?.id, name: name.trim(), surname: surname.trim() },
-      ]);
+      // Optional profile insert — do not block registration if it fails
+      if (data.user?.id) {
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .insert([{ id: data.user.id, name: name.trim() || null, surname: surname.trim() || null }]);
+        if (profileError) {
+          console.warn("Profile insert skipped:", profileError.message);
+        }
+      }
 
-      if (profileError) throw profileError;
-
-      setUser({ email: email.trim().toLowerCase(), name: name.trim() });
-      setEmail("");
-      setPassword("");
-      setName("");
-      setSurname("");
-      router.replace("/(tabs)");
+      Alert.alert("Success", "Account created! Please check your email to confirm.");
+      setScreen("login");
     } catch (error: any) {
-      Alert.alert("Registration Failed", error.message);
+      Alert.alert("Registration Failed", error?.message ?? "Unknown error");
     } finally {
       setIsLoading(false);
     }
@@ -160,12 +159,13 @@ async function saveUserToSupabase(userInfo: any) {
       });
       if (error) throw error;
 
-      setUser({ email: email.trim().toLowerCase() });
+      setUser({ email: data.user?.email ?? email.trim().toLowerCase() });
       setEmail("");
       setPassword("");
       router.replace("/(tabs)");
     } catch (error: any) {
-      Alert.alert("Login Failed", error.message);
+      const msg = String(error?.message ?? "Login failed");
+      Alert.alert("Login Failed", msg.includes("Invalid login credentials") ? "Invalid email or password." : msg);
     } finally {
       setIsLoading(false);
     }
@@ -232,7 +232,7 @@ async function saveUserToSupabase(userInfo: any) {
             <Text style={styles.formTitle}>Create Account</Text>
             <TextInput
               style={styles.input}
-              placeholder="Name"
+              placeholder="Name (optional)"
               value={name}
               onChangeText={setName}
               autoCapitalize="words"
@@ -240,7 +240,7 @@ async function saveUserToSupabase(userInfo: any) {
             />
             <TextInput
               style={styles.input}
-              placeholder="Surname"
+              placeholder="Surname (optional)"
               value={surname}
               onChangeText={setSurname}
               autoCapitalize="words"

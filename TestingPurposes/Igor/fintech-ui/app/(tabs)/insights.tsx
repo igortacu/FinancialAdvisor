@@ -16,31 +16,37 @@ import {
   ChartsReady,
 } from "@/lib/charts";
 import { cashFlow7d, allocation502030, monthlySpend } from "@/constants/mock";
+import { supabase } from "../../api";
 
 export default function Insights() {
   const insets = useSafeAreaInsets();
+
+  const [symbols, setSymbols] = React.useState<string[]>([]);
+  const [loadingSymbols, setLoadingSymbols] = React.useState<boolean>(false);
+  const [newsBySymbol, setNewsBySymbol] = React.useState<Record<string, { title: string; url: string }[]>>({});
   const [loadingNews, setLoadingNews] = React.useState<boolean>(false);
-  const [news, setNews] = React.useState<Array<{ title: string; url: string }>>([]);
-  const [newsError, setNewsError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     let isMounted = true;
     (async () => {
-      setLoadingNews(true);
-      setNewsError(null);
+      setLoadingSymbols(true);
+      setError(null);
       try {
-        // Simple REST: finnhub demo news endpoint (financial news)
-        // This uses their demo token, returns generic market news
-        const res = await fetch("https://finnhub.io/api/v1/news?category=general&token=demo");
-        const json = await res.json();
-        const items = Array.isArray(json)
-          ? json.slice(0, 6).map((n: any) => ({ title: String(n.headline ?? n.title ?? ""), url: String(n.url ?? "") }))
-          : [];
-        if (isMounted) setNews(items);
+        const { data, error } = await supabase
+          .from("investments")
+          .select("symbol")
+          .not("symbol", "is", null);
+        if (error) throw error;
+        const unique = Array.from(new Set((data ?? []).map((r: any) => String(r.symbol).trim()).filter(Boolean)));
+        if (isMounted) setSymbols(unique.length ? unique.slice(0, 5) : ["AAPL", "MSFT", "SPY"]);
       } catch (e: any) {
-        if (isMounted) setNewsError(e?.message ?? "Failed to load news");
+        if (isMounted) {
+          setSymbols(["AAPL", "MSFT", "SPY"]);
+          setError(e?.message ?? "Failed to read investments");
+        }
       } finally {
-        if (isMounted) setLoadingNews(false);
+        if (isMounted) setLoadingSymbols(false);
       }
     })();
     return () => {
@@ -48,30 +54,84 @@ export default function Insights() {
     };
   }, []);
 
+  React.useEffect(() => {
+    if (!symbols.length) return;
+    let isMounted = true;
+    (async () => {
+      setLoadingNews(true);
+      try {
+        // Use finnhub demo for simplicity; fetch limited items per symbol
+        const results = await Promise.all(
+          symbols.slice(0, 5).map(async (sym) => {
+            try {
+              const res = await fetch(`https://finnhub.io/api/v1/company-news?symbol=${encodeURIComponent(sym)}&from=2024-01-01&to=2025-12-31&token=demo`);
+              const json = await res.json();
+              const items = Array.isArray(json)
+                ? json.slice(0, 3).map((n: any) => ({ title: String(n.headline ?? n.title ?? ""), url: String(n.url ?? "") }))
+                : ([] as { title: string; url: string }[]);
+              return [sym, items] as const;
+            } catch {
+              return [sym, [] as { title: string; url: string }[]] as const;
+            }
+          })
+        );
+        if (isMounted) {
+          const map: Record<string, { title: string; url: string }[]> = {};
+          results.forEach(([sym, items]) => (map[sym] = items.length ? items : ([{ title: `${sym}: potential opportunity — check recent momentum and volume`, url: "" }] as { title: string; url: string }[])));
+          setNewsBySymbol(map);
+        }
+      } finally {
+        if (isMounted) setLoadingNews(false);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [symbols]);
+
   return (
     <ScrollView
       style={[s.root, { paddingTop: insets.top + 6 }]}
       contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 12 }}
       showsVerticalScrollIndicator={false}
     >
-      {/* Investment news (brief) */}
+      {/* Investment news based on your holdings (simple REST) */}
       <Animated.View entering={FadeInUp.duration(360)}>
         <Card>
-          <Text style={s.h1}>Investment news</Text>
+          <Text style={s.h1}>Insights — stocks & ETFs to watch</Text>
+          {loadingSymbols ? (
+            <View style={{ paddingVertical: 12 }}>
+              <ActivityIndicator />
+            </View>
+          ) : (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
+              {symbols.map((sym) => (
+                <View key={sym} style={s.badge}><Text style={s.badgeText}>{sym}</Text></View>
+              ))}
+            </View>
+          )}
+
           {loadingNews ? (
             <View style={{ paddingVertical: 12 }}>
               <ActivityIndicator />
             </View>
-          ) : newsError ? (
-            <Text style={{ color: "#ef4444" }}>{newsError}</Text>
-          ) : news.length === 0 ? (
-            <Text style={{ color: "#6B7280" }}>No news available.</Text>
           ) : (
-            <View style={{ gap: 10 }}>
-              {news.map((n, idx) => (
-                <TouchableOpacity key={`${idx}-${n.url}`} onPress={() => n.url && Linking.openURL(n.url)}>
-                  <Text numberOfLines={2} style={{ fontWeight: "700" }}>{n.title}</Text>
-                </TouchableOpacity>
+            <View style={{ gap: 12, marginTop: 10 }}>
+              {symbols.map((sym) => (
+                <View key={`sec-${sym}`}>
+                  <Text style={s.symbolTitle}>{sym}</Text>
+                  {!newsBySymbol[sym] || newsBySymbol[sym].length === 0 ? (
+                    <Text style={{ color: "#6B7280" }}>No recent headlines.</Text>
+                  ) : (
+                    <View style={{ gap: 8 }}>
+                      {newsBySymbol[sym].map((n, i) => (
+                        <TouchableOpacity key={`${sym}-${i}`} onPress={() => n.url && Linking.openURL(n.url)}>
+                          <Text numberOfLines={2} style={{ fontWeight: "700" }}>{n.title}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
               ))}
             </View>
           )}
@@ -229,4 +289,7 @@ export default function Insights() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#F5F7FB" },
   h1: { fontSize: 16, fontWeight: "800", marginBottom: 6 },
+  badge: { backgroundColor: "#EEF4FF", paddingVertical: 4, paddingHorizontal: 8, borderRadius: 999 },
+  badgeText: { color: "#1f2937", fontWeight: "700" },
+  symbolTitle: { fontWeight: "800", marginTop: 10, marginBottom: 6 },
 });
