@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import { supabase } from "../api";
 
 export type AuthUser = {
+  userId?: string;
   email?: string;
   name?: string;
   avatarUrl?: string;
