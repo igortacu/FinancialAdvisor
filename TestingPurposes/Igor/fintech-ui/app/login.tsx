@@ -1,1 +1,1 @@
-export { default } from "./(tabs)/login";
+export { default } from "../app/auth/login";

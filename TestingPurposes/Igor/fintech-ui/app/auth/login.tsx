@@ -175,7 +175,10 @@ export default function AuthScreen(): React.ReactElement {
       });
       if (error) throw error;
 
-      setUser({ userId: data.user?.id, email: data.user?.email ?? emailTrimmed });
+      setUser({
+        userId: data.user?.id,
+        email: data.user?.email ?? emailTrimmed,
+      });
       setEmail("");
       setPassword("");
       setIsLoading(false);
@@ -184,7 +187,9 @@ export default function AuthScreen(): React.ReactElement {
       const msg = String(error?.message ?? "Login failed");
       Alert.alert(
         "Login Failed",
-        msg.includes("Invalid login credentials") ? "Invalid email or password." : msg,
+        msg.includes("Invalid login credentials")
+          ? "Invalid email or password."
+          : msg,
       );
     } finally {
       setIsLoading(false);
