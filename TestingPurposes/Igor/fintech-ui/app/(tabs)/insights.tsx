@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Linking, TouchableOpacity } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInUp } from "react-native-reanimated";
 import Card from "@/components/Card";
@@ -19,6 +19,34 @@ import { cashFlow7d, allocation502030, monthlySpend } from "@/constants/mock";
 
 export default function Insights() {
   const insets = useSafeAreaInsets();
+  const [loadingNews, setLoadingNews] = React.useState<boolean>(false);
+  const [news, setNews] = React.useState<Array<{ title: string; url: string }>>([]);
+  const [newsError, setNewsError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      setLoadingNews(true);
+      setNewsError(null);
+      try {
+        // Simple REST: finnhub demo news endpoint (financial news)
+        // This uses their demo token, returns generic market news
+        const res = await fetch("https://finnhub.io/api/v1/news?category=general&token=demo");
+        const json = await res.json();
+        const items = Array.isArray(json)
+          ? json.slice(0, 6).map((n: any) => ({ title: String(n.headline ?? n.title ?? ""), url: String(n.url ?? "") }))
+          : [];
+        if (isMounted) setNews(items);
+      } catch (e: any) {
+        if (isMounted) setNewsError(e?.message ?? "Failed to load news");
+      } finally {
+        if (isMounted) setLoadingNews(false);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <ScrollView
@@ -26,6 +54,30 @@ export default function Insights() {
       contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 12 }}
       showsVerticalScrollIndicator={false}
     >
+      {/* Investment news (brief) */}
+      <Animated.View entering={FadeInUp.duration(360)}>
+        <Card>
+          <Text style={s.h1}>Investment news</Text>
+          {loadingNews ? (
+            <View style={{ paddingVertical: 12 }}>
+              <ActivityIndicator />
+            </View>
+          ) : newsError ? (
+            <Text style={{ color: "#ef4444" }}>{newsError}</Text>
+          ) : news.length === 0 ? (
+            <Text style={{ color: "#6B7280" }}>No news available.</Text>
+          ) : (
+            <View style={{ gap: 10 }}>
+              {news.map((n, idx) => (
+                <TouchableOpacity key={`${idx}-${n.url}`} onPress={() => n.url && Linking.openURL(n.url)}>
+                  <Text numberOfLines={2} style={{ fontWeight: "700" }}>{n.title}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </Card>
+      </Animated.View>
+
       {!ChartsReady ? (
         <Card>
           <Text style={{ fontWeight: "800" }}>Charts unavailable</Text>

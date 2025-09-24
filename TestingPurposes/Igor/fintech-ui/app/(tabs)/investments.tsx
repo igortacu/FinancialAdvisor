@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Linking } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInUp } from "react-native-reanimated";
 import Card from "@/components/Card";
@@ -13,9 +13,54 @@ import {
   ChartsReady,
 } from "@/lib/charts";
 import { positions } from "@/constants/mock";
+import { supabase } from "../../api";
 
 export default function Investments() {
   const insets = useSafeAreaInsets();
+  const [loading, setLoading] = React.useState<boolean>(false);
+  const [investments, setInvestments] = React.useState<Array<any>>([]);
+  const [error, setError] = React.useState<string | null>(null);
+  const [suggestions, setSuggestions] = React.useState<Array<{ title: string; url: string }>>([]);
+  const [loadingSug, setLoadingSug] = React.useState<boolean>(false);
+  const [sugError, setSugError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const { data, error } = await supabase.from("investments").select("*").order("id", { ascending: false });
+        if (error) throw error;
+        if (isMounted) setInvestments(data ?? []);
+      } catch (e: any) {
+        if (isMounted) setError(e?.message ?? "Failed to load investments");
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    })();
+
+    (async () => {
+      setLoadingSug(true);
+      setSugError(null);
+      try {
+        const res = await fetch("https://finnhub.io/api/v1/news?category=general&token=demo");
+        const json = await res.json();
+        const items = Array.isArray(json)
+          ? json.slice(0, 5).map((n: any) => ({ title: String(n.headline ?? n.title ?? ""), url: String(n.url ?? "") }))
+          : [];
+        if (isMounted) setSuggestions(items);
+      } catch (e: any) {
+        if (isMounted) setSugError(e?.message ?? "Failed to load suggestions");
+      } finally {
+        if (isMounted) setLoadingSug(false);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <ScrollView
@@ -145,6 +190,64 @@ export default function Investments() {
                   </View>
                 ))}
               </View>
+            </Card>
+          </Animated.View>
+
+          {/* Investments from Supabase */}
+          <Animated.View entering={FadeInUp.delay(320).duration(380)}>
+            <Card>
+              <Text style={s.h1}>Your investments</Text>
+              {loading ? (
+                <View style={{ paddingVertical: 16 }}>
+                  <ActivityIndicator />
+                </View>
+              ) : error ? (
+                <Text style={{ color: "#ef4444", marginTop: 8 }}>{error}</Text>
+              ) : investments.length === 0 ? (
+                <Text style={{ color: "#6B7280", marginTop: 8 }}>No investments yet.</Text>
+              ) : (
+                <View style={{ marginTop: 8, gap: 10 }}>
+                  {investments.map((inv) => (
+                    <View key={inv.id} style={s.row}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.symbol}>{inv.symbol ?? inv.name ?? "Instrument"}</Text>
+                        {inv.quantity != null && (
+                          <Text style={{ color: "#6B7280", marginTop: 2 }}>
+                            Qty: {inv.quantity} @ ${inv.avg_price ?? inv.price ?? "-"}
+                          </Text>
+                        )}
+                      </View>
+                      {inv.current_price != null && (
+                        <Text style={{ fontWeight: "800" }}>${inv.current_price}</Text>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              )}
+            </Card>
+          </Animated.View>
+
+          {/* Suggestions (brief) */}
+          <Animated.View entering={FadeInUp.delay(400).duration(380)}>
+            <Card>
+              <Text style={s.h1}>Suggestions</Text>
+              {loadingSug ? (
+                <View style={{ paddingVertical: 12 }}>
+                  <ActivityIndicator />
+                </View>
+              ) : sugError ? (
+                <Text style={{ color: "#ef4444" }}>{sugError}</Text>
+              ) : suggestions.length === 0 ? (
+                <Text style={{ color: "#6B7280" }}>No suggestions available.</Text>
+              ) : (
+                <View style={{ gap: 10, marginTop: 8 }}>
+                  {suggestions.map((sug, idx) => (
+                    <TouchableOpacity key={`${idx}-${sug.url}`} onPress={() => sug.url && Linking.openURL(sug.url)}>
+                      <Text numberOfLines={2} style={{ fontWeight: "700" }}>{sug.title}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </Card>
           </Animated.View>
         </>

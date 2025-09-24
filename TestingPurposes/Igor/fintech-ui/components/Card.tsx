@@ -1,6 +1,6 @@
 // components/Card.tsx
 import React, { PropsWithChildren } from "react";
-import { View, StyleSheet, ViewStyle } from "react-native";
+import { View, StyleSheet, ViewStyle, StyleProp } from "react-native";
 import TouchableScale from "./TouchableScale";
 import { cardShadow } from "@/utils/shadow";
 
@@ -8,7 +8,7 @@ export default function Card({
   children,
   style,
   onPress,
-}: PropsWithChildren<{ style?: ViewStyle; onPress?: () => void }>) {
+}: PropsWithChildren<{ style?: StyleProp<ViewStyle>; onPress?: () => void }>) {
   if (onPress) {
     return (
       <TouchableScale style={[styles.card, style]} onPress={onPress}>
