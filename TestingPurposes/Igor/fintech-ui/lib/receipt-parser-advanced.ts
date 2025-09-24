@@ -1,19 +1,20 @@
-// Advanced Moldovan receipt parser (Kaufland, Linella, etc.)
+// lib/receipt-parser-advanced.ts
 
+// ----- Types -----
 export type ParsedItem = {
   name: string;
-  qty: number; // default 1
-  unit?: string; // BUC | KG | L | PCS
-  unitPrice?: number; // optional if not present
+  qty: number;
+  unit?: string;
+  unitPrice?: number;
   total: number;
-  discount?: number; // negative
+  discount?: number;
 };
 
 export type ParsedReceipt = {
   merchant: string;
   date?: string;
   time?: string;
-  currency?: string; // MDL/lei by default
+  currency?: string;
   total?: number;
   vat?: number;
   items: ParsedItem[];
@@ -23,40 +24,24 @@ export type ParsedReceipt = {
     bodyLines: string[];
     footerLines: string[];
     inferredTotalFromItems?: number;
+    totalFromFooter?: number;
+    totalFromSuma?: number;
+    totalFromBottomRight?: number;
     matches?: Record<string, any>;
   };
 };
 
-// ---------------------- utils
-
-const RO_KEYWORDS = {
-  total: [/TOTAL/i, /SUMA/i, /SUMĂ/i, /\bSUM\b/i],
-  vat: [/TVA/i, /VAT/i],
-  discount: [/REDUCERE/i, /DISCOUNT/i, /^-\s*\d/i],
-  ignoreHead: [
-    /BON/i,
-    /FISCAL/i,
-    /CASA/i,
-    /CASH/i,
-    /CARD/i,
-    /NR/i,
-    /CHECK/i,
-    /MAGAZIN/i,
-  ],
-  units: [/(?:BUC|PCS|KG|G|L|ML)/i],
-  qtySep: /[x×@]/,
-  currency: [/\bMDL\b/i, /\bLEI\b/i, /\bRON\b/i],
-};
-
+// ----- Utils -----
 const DIGIT_FIXES: [RegExp, string][] = [
-  [/O/g, "0"], // O -> 0
-  [/S/g, "5"], // S -> 5
-  [/l/g, "1"], // l -> 1
-  [/I/g, "1"], // I -> 1
-  [/B(?=\d)/g, "8"], // B->8 when before numbers
+  [/O/g, "0"],
+  [/S/g, "5"],
+  [/l/g, "1"],
+  [/I/g, "1"],
+  [/B(?=\d)/g, "8"],
 ];
 
-const PRICE_TRAIL = /([0-9]+(?:[.,][0-9]{1,2})?)\s*$/;
+const PRICE = /[0-9]+(?:[.,][0-9]{1,2})/;
+const PRICE_TRAIL = new RegExp(`(${PRICE.source})\\s*$`);
 
 const num = (s: string) =>
   Number(
@@ -68,7 +53,6 @@ const num = (s: string) =>
   );
 
 const clamp2 = (n: number) => Number((n ?? 0).toFixed(2));
-
 const stripDoubles = (s: string) => s.replace(/\s{2,}/g, " ").trim();
 
 const normalize = (t: string) =>
@@ -79,10 +63,7 @@ const normalize = (t: string) =>
     .filter(Boolean)
     .map((l) => DIGIT_FIXES.reduce((acc, [r, v]) => acc.replace(r, v), l));
 
-// quick contains-any
-const any = (arr: RegExp[], s: string) => arr.some((r) => r.test(s));
-
-// Levenshtein distance (tiny)
+// tiny Levenshtein
 function lev(a: string, b: string) {
   const m = a.length,
     n = b.length;
@@ -101,6 +82,11 @@ function lev(a: string, b: string) {
   return dp[m][n];
 }
 
+function any(regs: RegExp[], s: string) {
+  return regs.some((r) => r.test(s));
+}
+
+// ----- Merchant detection -----
 function fuzzyMerchant(lines: string[]): string {
   const candidates = [
     "KAUFLAND",
@@ -109,110 +95,133 @@ function fuzzyMerchant(lines: string[]): string {
     "FELICIA",
     "FOXY",
     "NR1",
-    "FOOD",
     "MARKET",
-    "Kaufland",
-    "Linella",
+    "S.R.L",
+    "SRL",
+    "MAGAZIN",
   ];
-  let best = { name: lines[0] || "Receipt", score: Infinity };
-  for (const l of lines.slice(0, 8)) {
+  let best = { name: lines[0] || "Receipt", score: Infinity, idx: 0 };
+  for (let i = 0; i < Math.min(10, lines.length); i++) {
+    const l = lines[i];
     for (const c of candidates) {
-      const s = lev(l.toUpperCase().slice(0, 16), c.toUpperCase());
-      if (s < best.score) best = { name: stripDoubles(l), score: s };
+      const s = lev(l.toUpperCase().slice(0, 18), c);
+      if (s < best.score) best = { name: stripDoubles(l), score: s, idx: i };
     }
   }
-  return best.name;
+  // prefer uppercase merchant-like line
+  if (/[A-Z]/.test(best.name) && best.name === best.name.toUpperCase()) {
+    return best.name;
+  }
+  // try next lines that contain SRL/address
+  const extra = lines
+    .slice(0, 6)
+    .find((x) => /\bS\.?R\.?L\b|\bstr\b|\bstra\b/i.test(x));
+  return extra ? stripDoubles(extra) : stripDoubles(best.name);
 }
 
-// split header/body/footer by first TOTAL or TVA
+// ----- Segmentation -----
+const IGNORE_HEAD = [
+  /BON/i,
+  /FISCAL/i,
+  /CASA/i,
+  /NR/i,
+  /CHECK/i,
+  /MAGAZIN/i,
+  /^\d{2,}$/,
+];
+const UNITS = /(BUC|PCS|KG|G|L|ML)/i;
+
 function segment(lines: string[]) {
-  let totalIdx = lines.findIndex((l) => any(RO_KEYWORDS.total, l));
-  if (totalIdx < 0) totalIdx = lines.findIndex((l) => any(RO_KEYWORDS.vat, l));
-  if (totalIdx < 0) totalIdx = Math.max(lines.length - 4, 0);
-
-  // try to find first item-ish line start
-  let startIdx = lines.findIndex(
-    (l, i) =>
-      !any(RO_KEYWORDS.ignoreHead, l) &&
-      !any(RO_KEYWORDS.total, l) &&
-      !any(RO_KEYWORDS.vat, l) &&
-      // not a header number-only line
-      !/^\d{2,}$/.test(l) &&
-      // has either price at end or next line looks like qty x price
-      (PRICE_TRAIL.test(l) ||
-        (i + 1 < lines.length &&
-          /(\d+(?:[.,]\d+)?)\s*(?:BUC|PCS|KG|G|L|ML)?\s*[x×@]\s*([0-9]+(?:[.,][0-9]{1,2})?)/i.test(
-            lines[i + 1],
-          ))),
-  );
-
+  // find first body line (start of items)
+  let startIdx = lines.findIndex((l, i) => {
+    if (IGNORE_HEAD.some((r) => r.test(l))) return false;
+    if (PRICE_TRAIL.test(l)) return true;
+    const next = lines[i + 1] || "";
+    return /(\d+(?:[.,]\d+)?)\s*(?:BUC|PCS|KG|G|L|ML)?\s*[x×@]\s*([0-9]+(?:[.,][0-9]{1,2})?)/i.test(
+      next,
+    );
+  });
   if (startIdx < 0) startIdx = 0;
 
+  // footer: last 6 lines are typically totals/TVA
+  const footerStart = Math.max(lines.length - 8, startIdx + 1);
   const header = lines.slice(0, startIdx);
-  const body = lines.slice(startIdx, totalIdx);
-  const footer = lines.slice(totalIdx);
-
-  return { header, body, footer };
+  const body = lines.slice(startIdx, footerStart);
+  const footer = lines.slice(footerStart);
+  return { header, body, footer, footerStart };
 }
 
-// detect currency
-function guessCurrency(text: string): string | undefined {
-  if (/\bMDL\b/i.test(text) || /\bLEI\b/i.test(text)) return "MDL";
-  if (/\bRON\b/i.test(text)) return "RON";
-  if (/\bEUR\b/i.test(text)) return "EUR";
-  if (/\bUSD\b/i.test(text) || /\$/i.test(text)) return "USD";
-  return "MDL";
+// ----- Totals -----
+/** very tolerant SUMA matching (handles SUHA / 5UMA / SUM4 etc.) */
+function isSumaLike(s: string) {
+  const up = s.toUpperCase().replace(/\s/g, "");
+  // replace common OCR char swaps
+  const norm = up.replace(/H/g, "M").replace(/4/g, "A").replace(/5/g, "S");
+  return /SUMA\b|SUMĂ\b|SUM\b/.test(norm);
 }
 
-// parse totals from footer block
-function parseTotals(footer: string[]) {
-  let total: number | undefined;
-  let vat: number | undefined;
+function extractRightmostPrice(line: string): number | undefined {
+  const m = line.match(PRICE_TRAIL);
+  return m ? num(m[1]) : undefined;
+}
 
-  for (const l of footer) {
-    if (any(RO_KEYWORDS.total, l)) {
-      const m = l.match(/(?:TOTAL|SUMA|SUMĂ)\s+([0-9\.,\s]+)/i);
-      if (m) total = num(m[1]);
-    }
-    if (any(RO_KEYWORDS.vat, l)) {
-      const m = l.match(/TVA[^\d]*([0-9\.,]+)/i);
-      if (m) vat = num(m[1]);
+function parseTotals(lines: string[], fromIndex: number) {
+  let totalFromSuma: number | undefined;
+  // search around a SUMA-like line (same line or next 2)
+  for (let i = fromIndex; i < lines.length; i++) {
+    if (isSumaLike(lines[i])) {
+      const here = extractRightmostPrice(lines[i]);
+      if (here != null) {
+        totalFromSuma = here;
+        break;
+      }
+      for (let j = 1; j <= 2 && i + j < lines.length; j++) {
+        const v = extractRightmostPrice(lines[i + j]);
+        if (v != null) {
+          totalFromSuma = v;
+          break;
+        }
+      }
+      break;
     }
   }
-  // fallback: rightmost price on a footer line
-  if (total == null) {
-    for (const l of footer) {
-      const m = l.match(PRICE_TRAIL);
-      if (m) total = num(m[1]);
-    }
+
+  // fallback: pick the largest right-most price in the last third of the receipt
+  const bottom = lines.slice(Math.floor(lines.length * 0.66));
+  let maxV = -Infinity;
+  for (const l of bottom) {
+    const v = extractRightmostPrice(l);
+    if (v != null && v > maxV) maxV = v;
   }
-  return { total, vat };
+  const totalFromBottomRight = isFinite(maxV) ? clamp2(maxV) : undefined;
+
+  return { totalFromSuma, totalFromBottomRight };
 }
 
-// parse items from body block
+// ----- Items -----
 function parseItems(body: string[]): ParsedItem[] {
   const items: ParsedItem[] = [];
 
   for (let i = 0; i < body.length; i++) {
     const line = body[i];
 
-    // discount line attaches to previous item
-    if (any(RO_KEYWORDS.discount, line) || /^-\s*\d/.test(line)) {
+    // discounts
+    if (/REDUCERE|DISCOUNT|^-+\s*\d/i.test(line)) {
       const m = line.match(/-?\s*([0-9]+(?:[.,][0-9]{1,2})?)/);
       if (m && items.length) {
         const v = -Math.abs(num(m[1]));
         const last = items[items.length - 1];
         last.discount = clamp2((last.discount || 0) + v);
-        last.total = clamp2(last.total + v);
+        last.total = clamp2((last.total || 0) + v);
       }
       continue;
     }
 
-    // Pattern A: name + price at end (aligned column)
-    const a = line.match(/^(.*?)([ \.]{2,})?([0-9]+(?:[.,][0-9]{1,2})$)/);
+    // A: name ... price
+    const a = line.match(new RegExp(`^(.*?)(?:[ .]{2,})?(${PRICE.source})$`));
     if (a && a[1].trim().length >= 2) {
       const name = a[1].trim();
-      const price = num(a[3]);
+      const price = num(a[2]);
       items.push({
         name,
         qty: 1,
@@ -222,37 +231,38 @@ function parseItems(body: string[]): ParsedItem[] {
       continue;
     }
 
-    // Pattern B: name on this line, qty x unit on next line
+    // B: name + next line qty x price
     const next = body[i + 1] || "";
     const b = next.match(
-      /(\d+(?:[.,]\d+)?)\s*(BUC|PCS|KG|G|L|ML)?\s*[x×@]\s*([0-9]+(?:[.,][0-9]{1,2})?)\b/i,
+      new RegExp(
+        `(\\d+(?:[.,]\\d+)?)\\s*(?:${UNITS.source})?\\s*[x×@]\\s*(${PRICE.source})`,
+        "i",
+      ),
     );
     if (b && line.length > 2) {
       const name = line.trim();
       const qty = num(b[1]);
-      const unit = b[2]?.toUpperCase();
-      const unitPrice = num(b[3]);
-
-      // sometimes total shows on same or next+1 line
+      const unitPrice = num(b[2]);
       let total = clamp2(qty * unitPrice);
-      const maybeTotalLine = body[i + 2] || "";
-      const t1 = PRICE_TRAIL.exec(maybeTotalLine);
-      if (t1 && maybeTotalLine.length < 12) total = clamp2(num(t1[1]));
-
+      const maybeTotal = body[i + 2] || "";
+      const t = extractRightmostPrice(maybeTotal);
+      if (t != null && maybeTotal.length < 12) total = clamp2(t);
       items.push({
         name,
         qty,
-        unit,
         unitPrice: clamp2(unitPrice),
         total,
       });
-      i++; // consumed next line
+      i++;
       continue;
     }
 
-    // Pattern C: single line with qty, name, price (rare)
+    // C: qty  name  price
     const c = line.match(
-      /^(\d+(?:[.,]\d+)?)\s*(?:BUC|PCS|KG|G|L|ML)?\s+(.+?)\s+([0-9]+(?:[.,][0-9]{1,2}))$/,
+      new RegExp(
+        `^(\\d+(?:[.,]\\d+)?)\\s*(?:${UNITS.source})?\\s+(.+?)\\s+(${PRICE.source})$`,
+        "i",
+      ),
     );
     if (c) {
       const qty = num(c[1]);
@@ -267,42 +277,67 @@ function parseItems(body: string[]): ParsedItem[] {
       continue;
     }
 
-    // else: ignore line; or join wrapped name to previous item’s name
+    // name wrapping
     if (items.length && line.length > 3 && !PRICE_TRAIL.test(line)) {
       const last = items[items.length - 1];
-      if (last && last.name.length < 40) {
+      if (last && last.name.length < 40)
         last.name = stripDoubles(`${last.name} ${line}`);
-      }
     }
   }
-  return items;
+
+  // remove junk
+  return items.filter((it) => it.total > 0 || (it.discount && it.name));
 }
 
-// public entry
+// ----- Currency -----
+function guessCurrency(text: string): string | undefined {
+  if (/\bMDL\b/i.test(text) || /\bLEI\b/i.test(text)) return "MDL";
+  if (/\bRON\b/i.test(text)) return "RON";
+  if (/\bEUR\b/i.test(text)) return "EUR";
+  if (/\bUSD\b/i.test(text) || /\$/i.test(text)) return "USD";
+  return "MDL";
+}
+
+// ----- Public entry -----
 export function parseReceipt(ocrText: string): ParsedReceipt {
   const lines = normalize(ocrText);
-  const { header, body, footer } = segment(lines);
+  const { header, body, footer, footerStart } = segment(lines);
 
   const merchant = fuzzyMerchant(header.length ? header : lines);
 
-  // date & time (supports "dd.mm.yyyy HH:MM" or "dd.mm.yy HH.MM")
+  // date & time
   const dt = ocrText.match(/(\d{2}\.\d{2}\.\d{2,4}).{0,12}(\d{2}[:.]\d{2})/);
   const date = dt?.[1];
   const time = dt?.[2]?.replace(".", ":");
 
   const currency = guessCurrency(ocrText);
-  const { total, vat } = parseTotals(footer);
   const items = parseItems(body);
 
   const inferred = clamp2(items.reduce((s, it) => s + (it.total ?? 0), 0));
 
-  const result: ParsedReceipt = {
+  // totals
+  const { totalFromSuma, totalFromBottomRight } = parseTotals(
+    lines,
+    footerStart,
+  );
+  let total: number | undefined =
+    totalFromSuma ?? totalFromBottomRight ?? (inferred || undefined);
+
+  // sanity check vs inferred
+  if (
+    total != null &&
+    inferred > 0 &&
+    Math.abs(total - inferred) / Math.max(inferred, 1) > 0.6
+  ) {
+    total = inferred;
+  }
+
+  return {
     merchant: stripDoubles(merchant),
     date,
     time,
     currency,
-    total: total ?? inferred, // fallback
-    vat,
+    total: total ?? undefined,
     items,
     debug: {
       lines,
@@ -310,22 +345,10 @@ export function parseReceipt(ocrText: string): ParsedReceipt {
       bodyLines: body,
       footerLines: footer,
       inferredTotalFromItems: inferred,
-      matches: { dt: !!dt, total: total ?? null, vat: vat ?? null },
+      totalFromFooter: undefined,
+      totalFromSuma,
+      totalFromBottomRight,
+      matches: { dt: !!dt },
     },
   };
-
-  // sanity: if OCR produced a nonsense huge total vs inferred, trust inferred
-  if (
-    result.total &&
-    Math.abs(result.total - inferred) / (inferred || 1) > 0.5
-  ) {
-    result.total = inferred;
-  }
-
-  // drop zero/negative ghost items (except discounts attached above)
-  result.items = result.items.filter(
-    (it) => it.total > 0 || (it.discount && it.name),
-  );
-
-  return result;
 }
