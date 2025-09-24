@@ -160,7 +160,9 @@ export default function AuthScreen(): React.ReactElement {
   };
 
   const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
+    const emailTrimmed = email.trim().toLowerCase();
+    const passwordTrimmed = password.trim();
+    if (!emailTrimmed || !passwordTrimmed) {
       Alert.alert("Error", "Enter both email and password");
       return;
     }
@@ -168,22 +170,21 @@ export default function AuthScreen(): React.ReactElement {
     setIsLoading(true);
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password,
+        email: emailTrimmed,
+        password: passwordTrimmed,
       });
       if (error) throw error;
 
-      setUser({ email: data.user?.email ?? email.trim().toLowerCase() });
+      setUser({ userId: data.user?.id, email: data.user?.email ?? emailTrimmed });
       setEmail("");
       setPassword("");
+      setIsLoading(false);
       router.replace("/(tabs)");
     } catch (error: any) {
       const msg = String(error?.message ?? "Login failed");
       Alert.alert(
         "Login Failed",
-        msg.includes("Invalid login credentials")
-          ? "Invalid email or password."
-          : msg,
+        msg.includes("Invalid login credentials") ? "Invalid email or password." : msg,
       );
     } finally {
       setIsLoading(false);
