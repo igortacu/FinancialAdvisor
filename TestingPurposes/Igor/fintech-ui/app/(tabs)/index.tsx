@@ -8,6 +8,9 @@ import {
   Animated as RNAnimated,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  TouchableOpacity,
+  Modal,
+  Pressable,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -17,10 +20,13 @@ import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import Card from "@/components/Card";
 import ListItem from "@/components/ListItem";
 import { payments, accounts, categories } from "../../constants/mock";
+import { useAuth } from "@/store/auth";
 
 export default function Dashboard() {
   const insets = useSafeAreaInsets();
   const y = React.useRef(new RNAnimated.Value(0)).current;
+  const { user, signOut } = useAuth();
+  const [menuVisible, setMenuVisible] = React.useState(false);
 
   const headerTranslate = y.interpolate({
     inputRange: [0, 120],
@@ -38,6 +44,10 @@ export default function Dashboard() {
     { useNativeDriver: true },
   );
 
+  const avatarSource = user?.avatarUrl
+    ? { uri: user.avatarUrl }
+    : { uri: "https://i.pravatar.cc/100?img=12" };
+
   return (
     <View style={[styles.root, { paddingTop: insets.top + 6 }]}>
       {/* Header */}
@@ -48,15 +58,30 @@ export default function Dashboard() {
           { transform: [{ translateY: headerTranslate }] },
         ]}
       >
-        <Image
-          source={{ uri: "https://i.pravatar.cc/100?img=12" }}
-          style={styles.avatar}
-        />
+        <TouchableOpacity onPress={() => setMenuVisible(true)}>
+          <Image source={avatarSource} style={styles.avatar} />
+        </TouchableOpacity>
         <Text style={styles.title}>Fintech</Text>
         <View style={styles.headerBtn}>
           <Ionicons name="notifications-outline" size={20} />
         </View>
       </Animated.View>
+
+      {/* Logout menu */}
+      <Modal transparent visible={menuVisible} animationType="fade">
+        <Pressable style={styles.modalBackdrop} onPress={() => setMenuVisible(false)}>
+          <View />
+        </Pressable>
+        <View style={styles.menuContainer}>
+          {user?.email ? (
+            <Text style={styles.menuEmail}>{user.email}</Text>
+          ) : null}
+          <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); signOut(); }}>
+            <Ionicons name="log-out-outline" size={18} />
+            <Text style={styles.menuText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
 
       <RNAnimated.ScrollView
         showsVerticalScrollIndicator={false}
@@ -288,6 +313,37 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#fff",
   },
+
+  modalBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  menuContainer: {
+    position: "absolute",
+    top: 48,
+    left: 12,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+    minWidth: 180,
+  },
+  menuEmail: { paddingHorizontal: 6, paddingVertical: 6, color: "#374151", fontWeight: "600" },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+  },
+  menuText: { marginLeft: 8, fontWeight: "600" },
 
   card: {
     marginHorizontal: 16,
