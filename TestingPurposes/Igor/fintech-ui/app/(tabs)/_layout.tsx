@@ -1,4 +1,5 @@
 // app/(tabs)/_layout.tsx
+import "react-native-reanimated";
 import { Tabs } from "expo-router";
 import React from "react";
 import CompactDock from "@/components/CompactDock";
