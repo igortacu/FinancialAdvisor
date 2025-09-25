@@ -19,6 +19,6 @@ export const VictoryBar = V.VictoryBar ?? (() => null);
 export const VictoryPie = V.VictoryPie ?? (() => null);
 export const VictoryGroup = V.VictoryGroup ?? (() => null);
 export const VictoryContainer = V.VictoryContainer ?? (() => null);
-
+export const VictoryStack = V.VictoryStack ?? (() => null);
 export const ChartsReady =
   !!V.VictoryChart && !!V.VictoryPie && !!V.VictoryAxis;
