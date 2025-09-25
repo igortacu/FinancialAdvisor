@@ -12,7 +12,6 @@ import { useAuth } from "@/store/auth";
 type SymbolKey = "AAPL" | "MSFT" | "SPY" | "TSLA" | "GOOGL";
 const allowedSymbols: SymbolKey[] = ["AAPL", "MSFT", "SPY", "TSLA", "GOOGL"];
 
-<<<<<<< HEAD
 const mockedNews: Record<SymbolKey, { title: string; url: string }[]> = {
   AAPL: [
     {
@@ -46,8 +45,6 @@ const mockedNews: Record<SymbolKey, { title: string; url: string }[]> = {
   ],
 };
 
-=======
->>>>>>> 2614d8df (reviewed log in)
 // Fallback data
 const fallbackCash = [1200, 1100, 1400, 1300, 1500, 1250, 1600];
 const fallbackAlloc = [
@@ -60,7 +57,6 @@ const fallbackMonthly = [
   { month: "Feb", needs: 520, wants: 280, savings: 200 },
   { month: "Mar", needs: 510, wants: 290, savings: 200 },
 ];
-<<<<<<< HEAD
 
 // Utility for random numbers in range
 const rand = (min: number, max: number, decimals = 2) =>
@@ -73,8 +69,6 @@ function formatMoney(val: number, currency: string) {
     return `${val.toFixed(2)} ${currency}`;
   }
 }
-=======
->>>>>>> 2614d8df (reviewed log in)
 
 export default function Insights() {
   const insets = useSafeAreaInsets();
@@ -95,7 +89,6 @@ export default function Insights() {
   const [monthlyMix, setMonthlyMix] = React.useState<{ month: string; needs: number; wants: number; savings: number }[]>(fallbackMonthly);
   const [loadingAgg, setLoadingAgg] = React.useState(false);
 
-<<<<<<< HEAD
   // Extras: show currency & spent amounts for allocation; money received in last 7d
   const [currency, setCurrency] = React.useState<string>("USD");
   const [spentNeeds, setSpentNeeds] = React.useState<number>(0);
@@ -131,8 +124,6 @@ export default function Insights() {
     return { details, mix };
   }, [symbols]);
 
-=======
->>>>>>> 2614d8df (reviewed log in)
   // load current auth user email
   React.useEffect(() => {
     let isMounted = true;
@@ -172,7 +163,6 @@ export default function Insights() {
     return () => { isMounted = false; };
   }, [user?.userId]);
 
-<<<<<<< HEAD
   // headlines (mocked fallback data)
   React.useEffect(() => {
     if (!symbols.length) return;
@@ -186,35 +176,6 @@ export default function Insights() {
       setLoadingNews(false);
     }, 400); // small delay for realism
   }, [symbols]);
-=======
-  // headlines (still simple REST)
-  React.useEffect(() => {
-    if (!symbols.length) return;
-    let isMounted = true;
-    (async () => {
-      setLoadingNews(true);
-      try {
-        const results = await Promise.all(
-          symbols.slice(0, 5).map(async (sym) => {
-            try {
-              const res = await fetch(`https://finnhub.io/api/v1/company-news?symbol=${encodeURIComponent(sym)}&from=2024-01-01&to=2025-12-31&token=demo`);
-              const json = await res.json();
-              const items = Array.isArray(json)
-                ? json.slice(0, 3).map((n: any) => ({ title: String(n.headline ?? n.title ?? ""), url: String(n.url ?? "") }))
-                : ([] as { title: string; url: string }[]);
-              return [sym, items] as const;
-            } catch { return [sym, [] as { title: string; url: string }[]] as const; }
-          })
-        );
-        if (isMounted) {
-          const map: Record<SymbolKey, { title: string; url: string }[]> = {} as any;
-          results.forEach(([sym, items]) => (map[sym as SymbolKey] = items));
-          setNewsBySymbol(map);
-        }
-      } finally { if (isMounted) setLoadingNews(false); }
-    })();
-    return () => { isMounted = false; };
-  }, [symbols]);
 
   // user-scoped aggregates from Transactions, Budgets, Accounts
   React.useEffect(() => {
@@ -222,24 +183,110 @@ export default function Insights() {
     (async () => {
       if (!user?.userId) return;
       setLoadingAgg(true);
+
       try {
+        const now = new Date();
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const iso7 = sevenDaysAgo.toISOString();
+
+        // --- Transactions ---
         const tx = await supabase
           .from("transactions")
-          .select("date, amount")
+          .select("date, amount, currency, category, institution_name, from")
           .eq("user_id", user.userId)
           .order("date", { ascending: true })
-          .limit(30);
-        if (!tx.error && Array.isArray(tx.data) && tx.data.length) {
-          const amounts = tx.data.slice(-7).map((t: any) => Number(t.amount) || 0);
-          if (amounts.length >= 3 && isMounted) setCashSeries(amounts);
+          .limit(200);
+
+        if (!tx.error && Array.isArray(tx.data)) {
+          // Received transactions in last 7 days
+          const recent = tx.data
+            .filter((t: any) => new Date(t.date) >= sevenDaysAgo && Number(t.amount) > 0)
+            .map((t: any) => ({
+              amount: Number(t.amount || 0),
+              description: t.institution_name || t.from || "",
+              category: t.category || "",
+            }));
+
+          if (isMounted) {
+            if (recent.length > 0) {
+              setReceivedTransactions(recent);
+              setReceived7d(recent.reduce((sum, t) => sum + t.amount, 0));
+            } else {
+              // fallback
+              setReceivedTransactions([
+                { amount: 2850.0, description: "Victoria Bank", category: "Salary" },
+                { amount: 450.0, description: "Freelance Client", category: "Consulting Fee" },
+                { amount: 125.0, description: "PayPal Transfer", category: "Online Sales" },
+                { amount: 85.0, description: "Cash Refund", category: "Return" },
+                { amount: 200.0, description: "Family Transfer", category: "Gift" },
+              ]);
+              setReceived7d(3810); // sum of fallback amounts
+            }
+
+            // Cash flow series (last 7 days)
+            const amounts = tx.data.slice(-7).map((t: any) => Number(t.amount) || 0);
+            setCashSeries(amounts.length > 0 ? amounts : fallbackCash);
+          }
+
+          // Determine main currency
+          const freq: Record<string, number> = {};
+          tx.data.forEach((t: any) => {
+            const c = String(t.currency || "USD");
+            freq[c] = (freq[c] || 0) + 1;
+          });
+          const top = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0] || "USD";
+          if (isMounted) setCurrency(top);
+
+          // Spending classification (Needs / Wants / Savings) for current month
+          const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+          const needsKeys = ["rent", "housing", "utility", "bill", "grocery", "transport", "fuel", "insurance", "internet", "phone"];
+          const wantsKeys = ["entertainment", "shopping", "travel", "restaurant", "coffee", "fun", "game"];
+          const saveKeys = ["saving", "investment", "invest", "deposit"];
+
+          let n = 0, w = 0, s = 0;
+          tx.data.forEach((t: any) => {
+            const d = new Date(t.date);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+            if (key !== monthKey) return;
+            const amt = Math.abs(Number(t.amount) || 0);
+            const cat = String(t.category || "").toLowerCase();
+            if (saveKeys.some(k => cat.includes(k))) s += amt;
+            else if (needsKeys.some(k => cat.includes(k))) n += amt;
+            else if (wantsKeys.some(k => cat.includes(k))) w += amt;
+            else n += amt; // default to needs
+          });
+
+          if (isMounted) {
+            setSpentNeeds(n || 1200); // fallback values if zero
+            setSpentWants(w || 700);
+            setSpentSavings(s || 400);
+          }
+        } else {
+          // No transactions -> apply fallback
+          if (isMounted) {
+            setCashSeries(fallbackCash);
+            setReceivedTransactions([
+              { amount: 2850.0, description: "Victoria Bank", category: "Salary" },
+              { amount: 450.0, description: "Freelance Client", category: "Consulting Fee" },
+              { amount: 125.0, description: "PayPal Transfer", category: "Online Sales" },
+              { amount: 85.0, description: "Cash Refund", category: "Return" },
+              { amount: 200.0, description: "Family Transfer", category: "Gift" },
+            ]);
+            setReceived7d(3810);
+            setSpentNeeds(1200);
+            setSpentWants(700);
+            setSpentSavings(400);
+          }
         }
 
+        // --- Budgets for allocation ---
         const budgets = await supabase
           .from("budgets")
           .select("month, category, budget_amount")
           .eq("user_id", user.userId)
           .order("month", { ascending: false })
           .limit(50);
+
         if (!budgets.error && Array.isArray(budgets.data) && budgets.data.length) {
           const latestMonth = budgets.data[0].month;
           const rows = budgets.data.filter((b: any) => b.month === latestMonth);
@@ -256,13 +303,17 @@ export default function Insights() {
             { x: "Wants", y: Math.round((sums.Wants / total) * 100) },
             { x: "Savings", y: Math.round((sums.Savings / total) * 100) },
           ]);
+        } else {
+          if (isMounted) setAllocation(fallbackAlloc);
         }
 
+        // --- Accounts for monthly mix ---
         const accounts = await supabase
           .from("accounts")
           .select("balance, type, institution_name")
           .eq("user_id", user.userId)
           .limit(100);
+
         if (!accounts.error && Array.isArray(accounts.data) && accounts.data.length) {
           const total = accounts.data.reduce((sum: number, a: any) => sum + (Number(a.balance) || 0), 0);
           const need = Math.round(total * 0.5);
@@ -273,176 +324,17 @@ export default function Insights() {
             { month: "Feb", needs: Math.round(need * 1.02), wants: Math.round(want * 0.98), savings: Math.round(save * 1.01) },
             { month: "Mar", needs: Math.round(need * 1.01), wants: Math.round(want * 1.01), savings: Math.round(save * 1.02) },
           ]);
+        } else {
+          if (isMounted) setMonthlyMix(fallbackMonthly);
         }
+
       } finally {
         if (isMounted) setLoadingAgg(false);
       }
     })();
+
     return () => { isMounted = false; };
   }, [user?.userId]);
-
-  const cashData = cashSeries.map((y, i) => ({ x: i + 1, y }));
->>>>>>> 2614d8df (reviewed log in)
-
-  // user-scoped aggregates from Transactions, Budgets, Accounts
-React.useEffect(() => {
-  let isMounted = true;
-  (async () => {
-    if (!user?.userId) return;
-    setLoadingAgg(true);
-
-    try {
-      const now = new Date();
-      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const iso7 = sevenDaysAgo.toISOString();
-
-      // --- Transactions ---
-      const tx = await supabase
-        .from("transactions")
-        .select("date, amount, currency, category, institution_name, from")
-        .eq("user_id", user.userId)
-        .order("date", { ascending: true })
-        .limit(200);
-
-      if (!tx.error && Array.isArray(tx.data)) {
-        // Received transactions in last 7 days
-        const recent = tx.data
-          .filter((t: any) => new Date(t.date) >= sevenDaysAgo && Number(t.amount) > 0)
-          .map((t: any) => ({
-            amount: Number(t.amount || 0),
-            description: t.institution_name || t.from || "",
-            category: t.category || "",
-          }));
-
-        if (isMounted) {
-          if (recent.length > 0) {
-            setReceivedTransactions(recent);
-            setReceived7d(recent.reduce((sum, t) => sum + t.amount, 0));
-          } else {
-            // fallback
-            setReceivedTransactions([
-              { amount: 2850.0, description: "Victoria Bank", category: "Salary" },
-              { amount: 450.0, description: "Freelance Client", category: "Consulting Fee" },
-              { amount: 125.0, description: "PayPal Transfer", category: "Online Sales" },
-              { amount: 85.0, description: "Cash Refund", category: "Return" },
-              { amount: 200.0, description: "Family Transfer", category: "Gift" },
-            ]);
-            setReceived7d(3810); // sum of fallback amounts
-          }
-
-          // Cash flow series (last 7 days)
-          const amounts = tx.data.slice(-7).map((t: any) => Number(t.amount) || 0);
-          setCashSeries(amounts.length > 0 ? amounts : fallbackCash);
-        }
-
-        // Determine main currency
-        const freq: Record<string, number> = {};
-        tx.data.forEach((t: any) => {
-          const c = String(t.currency || "USD");
-          freq[c] = (freq[c] || 0) + 1;
-        });
-        const top = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0] || "USD";
-        if (isMounted) setCurrency(top);
-
-        // Spending classification (Needs / Wants / Savings) for current month
-        const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-        const needsKeys = ["rent", "housing", "utility", "bill", "grocery", "transport", "fuel", "insurance", "internet", "phone"];
-        const wantsKeys = ["entertainment", "shopping", "travel", "restaurant", "coffee", "fun", "game"];
-        const saveKeys = ["saving", "investment", "invest", "deposit"];
-
-        let n = 0, w = 0, s = 0;
-        tx.data.forEach((t: any) => {
-          const d = new Date(t.date);
-          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-          if (key !== monthKey) return;
-          const amt = Math.abs(Number(t.amount) || 0);
-          const cat = String(t.category || "").toLowerCase();
-          if (saveKeys.some(k => cat.includes(k))) s += amt;
-          else if (needsKeys.some(k => cat.includes(k))) n += amt;
-          else if (wantsKeys.some(k => cat.includes(k))) w += amt;
-          else n += amt; // default to needs
-        });
-
-        if (isMounted) {
-          setSpentNeeds(n || 1200); // fallback values if zero
-          setSpentWants(w || 700);
-          setSpentSavings(s || 400);
-        }
-      } else {
-        // No transactions -> apply fallback
-        if (isMounted) {
-          setCashSeries(fallbackCash);
-          setReceivedTransactions([
-            { amount: 2850.0, description: "Victoria Bank", category: "Salary" },
-            { amount: 450.0, description: "Freelance Client", category: "Consulting Fee" },
-            { amount: 125.0, description: "PayPal Transfer", category: "Online Sales" },
-            { amount: 85.0, description: "Cash Refund", category: "Return" },
-            { amount: 200.0, description: "Family Transfer", category: "Gift" },
-          ]);
-          setReceived7d(3810);
-          setSpentNeeds(1200);
-          setSpentWants(700);
-          setSpentSavings(400);
-        }
-      }
-
-      // --- Budgets for allocation ---
-      const budgets = await supabase
-        .from("budgets")
-        .select("month, category, budget_amount")
-        .eq("user_id", user.userId)
-        .order("month", { ascending: false })
-        .limit(50);
-
-      if (!budgets.error && Array.isArray(budgets.data) && budgets.data.length) {
-        const latestMonth = budgets.data[0].month;
-        const rows = budgets.data.filter((b: any) => b.month === latestMonth);
-        const sums: Record<string, number> = { Needs: 0, Wants: 0, Savings: 0 };
-        rows.forEach((r: any) => {
-          const k = String(r.category || "").toLowerCase();
-          if (k.includes("need")) sums.Needs += Number(r.budget_amount) || 0;
-          else if (k.includes("save")) sums.Savings += Number(r.budget_amount) || 0;
-          else sums.Wants += Number(r.budget_amount) || 0;
-        });
-        const total = Math.max(1, sums.Needs + sums.Wants + sums.Savings);
-        if (isMounted) setAllocation([
-          { x: "Needs", y: Math.round((sums.Needs / total) * 100) },
-          { x: "Wants", y: Math.round((sums.Wants / total) * 100) },
-          { x: "Savings", y: Math.round((sums.Savings / total) * 100) },
-        ]);
-      } else {
-        if (isMounted) setAllocation(fallbackAlloc);
-      }
-
-      // --- Accounts for monthly mix ---
-      const accounts = await supabase
-        .from("accounts")
-        .select("balance, type, institution_name")
-        .eq("user_id", user.userId)
-        .limit(100);
-
-      if (!accounts.error && Array.isArray(accounts.data) && accounts.data.length) {
-        const total = accounts.data.reduce((sum: number, a: any) => sum + (Number(a.balance) || 0), 0);
-        const need = Math.round(total * 0.5);
-        const want = Math.round(total * 0.3);
-        const save = Math.round(total * 0.2);
-        if (isMounted) setMonthlyMix([
-          { month: "Jan", needs: need, wants: want, savings: save },
-          { month: "Feb", needs: Math.round(need * 1.02), wants: Math.round(want * 0.98), savings: Math.round(save * 1.01) },
-          { month: "Mar", needs: Math.round(need * 1.01), wants: Math.round(want * 1.01), savings: Math.round(save * 1.02) },
-        ]);
-      } else {
-        if (isMounted) setMonthlyMix(fallbackMonthly);
-      }
-
-    } finally {
-      if (isMounted) setLoadingAgg(false);
-    }
-  })();
-
-  return () => { isMounted = false; };
-}, [user?.userId]);
-
 
   const cashData = cashSeries.map((y, i) => ({ x: i + 1, y }));
 
@@ -464,7 +356,6 @@ React.useEffect(() => {
         </Card>
       </Animated.View>
 
-<<<<<<< HEAD
       {/* Market snapshot */}
       <Animated.View entering={FadeInUp.duration(340)}>
         <Card>
@@ -485,8 +376,6 @@ React.useEffect(() => {
         </Card>
       </Animated.View>
 
-=======
->>>>>>> 2614d8df (reviewed log in)
       {/* Holdings-based headlines */}
       <Animated.View entering={FadeInUp.duration(360)}>
         <Card>
@@ -512,7 +401,6 @@ React.useEffect(() => {
                     <Text style={{ color: "#6B7280" }}>No recent headlines.</Text>
                   ) : (
                     newsBySymbol[sym].map((n, i) => (
-<<<<<<< HEAD
                       <Pressable
                         key={`${sym}-${i}`}
                         onPress={() => n.url && Linking.openURL(n.url)}
@@ -529,11 +417,6 @@ React.useEffect(() => {
                           {n.title}
                         </Text>
                       </Pressable>
-=======
-                      <TouchableOpacity key={`${sym}-${i}`} onPress={() => n.url && Linking.openURL(n.url)}>
-                        <Text numberOfLines={2} style={{ fontWeight: "700" }}>{n.title}</Text>
-                      </TouchableOpacity>
->>>>>>> 2614d8df (reviewed log in)
                     ))
                   )}
                 </View>
@@ -547,7 +430,6 @@ React.useEffect(() => {
       <Animated.View entering={FadeInUp.duration(420)}>
         <Card>
           <Text style={s.h1}>Cash flow (7d)</Text>
-<<<<<<< HEAD
           <Text style={{ fontWeight: "700", color: "#16a34a", marginBottom: 8 }}>
             Total Received: {formatMoney(received7d, currency)}
           </Text>
@@ -609,21 +491,6 @@ React.useEffect(() => {
                 )}
               </CompactChart>
             </>
-=======
-          {loadingAgg ? (
-            <ActivityIndicator />
-          ) : (
-            <CompactChart height={160}>
-              {(w, h) => (
-                <VictoryChart width={w} height={h} padding={{ left: 36, right: 10, top: 8, bottom: 22 }} containerComponent={<VictoryContainer responsive={false} />} animate={{ duration: 700 }}>
-                  <VictoryAxis dependentAxis tickFormat={(t: number) => `$${t}`} style={{ grid: { stroke: "#EEF2F7" }, tickLabels: { fontSize: 9 } }} />
-                  <VictoryAxis style={{ tickLabels: { fontSize: 9 } }} />
-                  <VictoryArea interpolation="natural" data={cashData} style={{ data: { fill: "#dbe7ff" } }} />
-                  <VictoryLine interpolation="natural" data={cashData} style={{ data: { stroke: "#246BFD", strokeWidth: 2 } }} />
-                </VictoryChart>
-              )}
-            </CompactChart>
->>>>>>> 2614d8df (reviewed log in)
           )}
         </Card>
       </Animated.View>
@@ -635,7 +502,6 @@ React.useEffect(() => {
           {loadingAgg ? (
             <ActivityIndicator />
           ) : (
-<<<<<<< HEAD
             <>
               <CompactChart height={150}>
                 {(w, h) => (
@@ -675,19 +541,6 @@ React.useEffect(() => {
                 </View>
               </View>
             </>
-=======
-            <CompactChart height={150}>
-              {(w, h) => (
-                <VictoryPie
-                  width={w} height={h} innerRadius={48} padAngle={2} labelRadius={h/2-16} animate={{ duration: 700 }}
-                  data={allocation}
-                  colorScale={["#246BFD","#5b76f7","#9db7ff"]}
-                  labels={({ datum }: { datum: any }) => `${datum.x}\n${datum.y}%`}
-                  style={{ labels: { fontSize: 10, fill: "#111827" } }}
-                />
-              )}
-            </CompactChart>
->>>>>>> 2614d8df (reviewed log in)
           )}
         </Card>
       </Animated.View>
@@ -699,7 +552,6 @@ React.useEffect(() => {
           {loadingAgg ? (
             <ActivityIndicator />
           ) : (
-<<<<<<< HEAD
             <>
               <CompactChart height={190}>
                 {(w,h) => (
@@ -743,25 +595,6 @@ React.useEffect(() => {
           )}
         </Card>
       </Animated.View>
-=======
-            <CompactChart height={180}>
-              {(w,h) => (
-                <VictoryChart width={w} height={h} padding={{ left:44,right:12,top:8,bottom:28 }} domainPadding={{ x:16 }} containerComponent={<VictoryContainer responsive={false} />} animate={{ duration:700 }}>
-                  <VictoryAxis dependentAxis tickFormat={(t:number)=>`$${t}`} style={{ grid:{stroke:"#EEF2F7"}, tickLabels:{fontSize:9}}} />
-                  <VictoryAxis style={{ tickLabels:{ fontSize:9 } }} />
-                  <VictoryGroup offset={0} style={{ data: { width: 18 } }}>
-                    <VictoryBar data={monthlyMix} x="month" y="needs" style={{ data:{ fill:"#246BFD" } }} />
-                    <VictoryBar data={monthlyMix} x="month" y="wants" style={{ data:{ fill:"#5b76f7" } }} />
-                    <VictoryBar data={monthlyMix} x="month" y="savings" style={{ data:{ fill:"#9db7ff" } }} />
-                  </VictoryGroup>
-                </VictoryChart>
-              )}
-            </CompactChart>
-          )}
-        </Card>
-      </Animated.View>
-
->>>>>>> 2614d8df (reviewed log in)
     </ScrollView>
   );
 }

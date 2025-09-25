@@ -13,11 +13,13 @@
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
     "@miblanchard/react-native-slider": "^2.6.0",
+    "@ptomasroos/react-native-multi-slider": "^2.2.2",
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
     "@shopify/react-native-skia": "^2.2.18",
     "@supabase/supabase-js": "^2.57.4",
+    "bride": "^0.1.0",
     "cors": "^2.8.5",
     "expo": "~54.0.10",
     "expo-auth-session": "^7.0.8",
