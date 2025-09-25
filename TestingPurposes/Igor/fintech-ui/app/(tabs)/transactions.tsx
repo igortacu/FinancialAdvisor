@@ -11,6 +11,7 @@ import {
   Modal,
   RefreshControl,
   Alert,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -99,7 +100,7 @@ export default function Transactions() {
 
   // ---- list + paging
   const [list, setList] = React.useState<TxRow[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const [loading, setLoading] = React.useState(false); // start false to avoid spinner lock
   const [refreshing, setRefreshing] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [hasMore, setHasMore] = React.useState(true);
@@ -158,11 +159,15 @@ export default function Transactions() {
     };
   }, [user?.userId]);
 
-  // ---- initial load
+  // ---- initial load + realtime
   React.useEffect(() => {
-    if (!userId) return;
-    loadPage(true).catch(() => {});
-    // realtime
+    if (!userId) {
+      setLoading(false); // avoid infinite spinner while auth resolves
+      return;
+    }
+
+    loadPage(true).catch(() => setLoading(false));
+
     const ch = supabase
       .channel("tx_changes")
       .on(
@@ -190,6 +195,7 @@ export default function Transactions() {
         },
       )
       .subscribe();
+
     return () => {
       supabase.removeChannel(ch);
     };
@@ -198,34 +204,37 @@ export default function Transactions() {
 
   async function loadPage(reset = false) {
     if (!userId) return;
-    if (loading && !reset) return;
+
+    if (!reset && loading) return;
 
     if (reset) {
       setLoading(true);
       setHasMore(true);
     }
 
-    const from = reset ? 0 : list.length;
-    const to = from + PAGE_SIZE - 1;
+    try {
+      const from = reset ? 0 : list.length;
+      const to = from + PAGE_SIZE - 1;
 
-    const { data, error } = await supabase
-      .from("transactions")
-      .select("*")
-      .eq("user_id", userId)
-      .order("date", { ascending: false })
-      .range(from, to);
+      const { data, error } = await supabase
+        .from("transactions")
+        .select("*")
+        .eq("user_id", userId)
+        .order("date", { ascending: false })
+        .range(from, to);
 
-    if (error) {
-      console.error(error);
+      if (error) throw error;
+
+      if (reset) setList((data || []) as TxRow[]);
+      else setList((p) => [...p, ...(data as TxRow[])]);
+
+      if (!data || data.length < PAGE_SIZE) setHasMore(false);
+    } catch (e: any) {
+      console.error(e);
+      Alert.alert("Load failed", e?.message ?? "Unknown error");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (reset) setList(data as TxRow[]);
-    else setList((p) => [...p, ...(data as TxRow[])]);
-
-    if (!data || data.length < PAGE_SIZE) setHasMore(false);
-    setLoading(false);
   }
 
   async function onRefresh() {
@@ -245,23 +254,53 @@ export default function Transactions() {
   }
 
   async function pickImage() {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") return;
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaType.Images,
-      quality: 0.9,
-      base64: true,
-    });
-    if (!res.canceled && res.assets?.[0]?.uri) await runScan(res.assets[0].uri);
+    try {
+      if (Platform.OS !== "web") {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (perm.status !== "granted") {
+          Alert.alert(
+            "Photos blocked",
+            "Allow Photos access to attach receipts.",
+          );
+          return;
+        }
+      }
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images, // correct enum
+        quality: 0.9,
+        base64: true,
+        allowsMultipleSelection: false,
+        exif: false,
+      });
+      if (!res.canceled && res.assets?.[0]?.uri)
+        await runScan(res.assets[0].uri);
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Picker error", "Failed to open the photo library.");
+    }
   }
   async function takePhoto() {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") return;
-    const res = await ImagePicker.launchCameraAsync({
-      quality: 0.9,
-      base64: true,
-    });
-    if (!res.canceled && res.assets?.[0]?.uri) await runScan(res.assets[0].uri);
+    try {
+      if (Platform.OS !== "web") {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (perm.status !== "granted") {
+          Alert.alert(
+            "Camera blocked",
+            "Allow Camera access to scan receipts.",
+          );
+          return;
+        }
+      }
+      const res = await ImagePicker.launchCameraAsync({
+        quality: 0.9,
+        base64: true,
+      });
+      if (!res.canceled && res.assets?.[0]?.uri)
+        await runScan(res.assets[0].uri);
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Camera error", "Failed to open the camera.");
+    }
   }
   async function runScan(uri: string) {
     setBusy(true);
@@ -274,7 +313,7 @@ export default function Transactions() {
         setParsed(MOCK_RECEIPT);
         return;
       }
-      // TODO: hook OCR → parse → setParsed(parsedReceipt)
+      // TODO: OCR → parse → setParsed(parsedReceipt)
     } finally {
       setBusy(false);
     }
@@ -386,6 +425,14 @@ export default function Transactions() {
         </Pressable>
       </Animated.View>
 
+      {/* tiny status (debug) */}
+      <View style={{ paddingHorizontal: 16, marginBottom: 6 }}>
+        <Text style={{ color: "#6B7280", fontSize: 12 }}>
+          userId: {userId ? "ok" : "none"} · loading: {String(loading)} · rows:{" "}
+          {list.length}
+        </Text>
+      </View>
+
       {/* KPIs */}
       <Animated.View
         entering={FadeInDown.delay(80).duration(360)}
@@ -435,7 +482,7 @@ export default function Transactions() {
               </Text>
             </Pressable>
           ))}
-          {/* month switcher (prev / next) */}
+          {/* month switcher */}
           <Pressable
             onPress={() => setMonth(shiftMonth(month, -1))}
             style={s.monthBtn}
@@ -783,6 +830,8 @@ const s = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
   },
+
+  // debug chip area uses default text styling
 
   kpisRow: {
     flexDirection: "row",
