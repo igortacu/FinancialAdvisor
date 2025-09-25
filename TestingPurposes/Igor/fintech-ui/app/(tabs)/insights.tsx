@@ -284,17 +284,7 @@ export default function Insights() {
       contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 12 }}
       showsVerticalScrollIndicator={false}
     >
-      {/* Auth user email */}
-      <Animated.View entering={FadeInUp.duration(320)}>
-        <Card>
-          <Text style={s.h1}>Account</Text>
-          {authLoading ? (
-            <ActivityIndicator />
-          ) : (
-            <Text style={{ fontWeight: "700" }}>{authEmail ?? "Not signed in"}</Text>
-          )}
-        </Card>
-      </Animated.View>
+    
 
       {/* Stock Selection */}
       <Animated.View entering={FadeInUp.duration(340)}>
