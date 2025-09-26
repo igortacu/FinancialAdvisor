@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInUp } from "react-native-reanimated";
 import Card from "@/components/Card";
 import CompactChart from "@/components/CompactChart";
-import { VictoryChart, VictoryLine, VictoryArea, VictoryAxis, VictoryBar, VictoryPie, VictoryGroup, VictoryContainer } from "@/lib/charts";
+import { VictoryChart,VictoryStack, VictoryLine, VictoryArea, VictoryAxis, VictoryBar, VictoryPie, VictoryGroup, VictoryContainer } from "@/lib/charts";
 import { supabase } from "../../api";
 import { useAuth } from "@/store/auth";
 
@@ -86,9 +86,15 @@ const fallbackAlloc = [
 ];
 
 const fallbackMonthly = [
-  { month: "Jan", needs: 500, wants: 300, savings: 200 },
-  { month: "Feb", needs: 520, wants: 280, savings: 200 },
-  { month: "Mar", needs: 510, wants: 290, savings: 200 },
+  { month: "Jan", needs: 1200, wants: 700, savings: 400 },
+  { month: "Feb", needs: 1500, wants: 600, savings: 500 },
+  { month: "Mar", needs: 1300, wants: 800, savings: 450 },
+  { month: "Apr", needs: 1400, wants: 750, savings: 600 },
+  { month: "May", needs: 1600, wants: 900, savings: 700 },
+  { month: "Jun", needs: 1700, wants: 800, savings: 600 },
+  { month: "Jul", needs: 1500, wants: 700, savings: 500 },
+  { month: "Aug", needs: 1800, wants: 1000, savings: 800 },
+  { month: "Sep", needs: 1600, wants: 900, savings: 700 },
 ];
 
 // Utility for random numbers in range
@@ -121,11 +127,11 @@ export default function Insights() {
   const [loadingSymbols, setLoadingSymbols] = React.useState(false);
   const [newsBySymbol, setNewsBySymbol] = React.useState<Record<SymbolKey, { title: string; url: string }[]>>({} as any);
   const [loadingNews, setLoadingNews] = React.useState(false);
-
+  const [selectedMonth, setSelectedMonth] = React.useState<string>("All");
+  const [dropdownOpen, setDropdownOpen] = React.useState(false);
   // Auth email (from Authentication page)
   const [authLoading, setAuthLoading] = React.useState(false);
   const [authEmail, setAuthEmail] = React.useState<string | null>(null);
-
   // User-scoped aggregates
   const [cashSeries, setCashSeries] = React.useState(fallbackCash);
   const [allocation, setAllocation] = React.useState({ current: [50, 30, 20], goal: [50, 30, 20] }); // [Needs, Wants, Savings]
@@ -145,6 +151,10 @@ export default function Insights() {
     { amount: 85.0, description: "Cash Refund", category: "Return" },
     { amount: 200.0, description: "Family Transfer", category: "Gift" },
   ]);
+
+  const filteredMonthlyData = selectedMonth === "All" 
+    ? fallbackMonthly 
+    : fallbackMonthly.filter(item => item.month === selectedMonth);
 
   // Stock data for selected symbols
   const stockData = React.useMemo(() => {
@@ -166,6 +176,37 @@ export default function Insights() {
     });
     return data;
   }, [selectedSymbols]);
+
+  // Fixed chart data preparation
+  const chartData = React.useMemo(() => {
+    if (selectedMonth === "All") {
+      // Transform data for grouped bars - create separate entries for each category
+      const transformedData: any[] = [];
+      fallbackMonthly.forEach(month => {
+        transformedData.push(
+          { month: month.month, category: "Needs", amount: month.needs, color: "#EF4444" },
+          { month: month.month, category: "Wants", amount: month.wants, color: "#F59E0B" },
+          { month: month.month, category: "Savings", amount: month.savings, color: "#10B981" }
+        );
+      });
+      return transformedData;
+    } else {
+      // Single month data
+      const monthData = filteredMonthlyData[0];
+      if (!monthData) return [];
+      return [
+        { month: monthData.month, category: "Needs", amount: monthData.needs, color: "#EF4444" },
+        { month: monthData.month, category: "Wants", amount: monthData.wants, color: "#F59E0B" },
+        { month: monthData.month, category: "Savings", amount: monthData.savings, color: "#10B981" }
+      ];
+    }
+  }, [selectedMonth, filteredMonthlyData]);
+
+  const toggleDropdown = () => setDropdownOpen(!dropdownOpen);
+  const handleMonthSelect = (month: string) => {
+    setSelectedMonth(month);
+    setDropdownOpen(false);
+  };
 
   // load current auth user email
   React.useEffect(() => {
@@ -284,8 +325,6 @@ export default function Insights() {
       contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 12 }}
       showsVerticalScrollIndicator={false}
     >
-    
-
       {/* Stock Selection */}
       <Animated.View entering={FadeInUp.duration(340)}>
         <Card>
@@ -342,24 +381,17 @@ export default function Insights() {
 
                 {/* Mini Chart */}
                 <View style={s.miniChartContainer}>
-                  <CompactChart height={60}>
+                  <CompactChart height={200}>
                     {(w, h) => (
-                      <VictoryChart 
-                        width={w} 
-                        height={h} 
-                        padding={0}
+                      <VictoryChart
+                        width={w || 300} 
+                        height={h || 200} 
+                        padding={{ left: 50, right: 10, top: 20, bottom: 30 }}
                         containerComponent={<VictoryContainer responsive={false} />}
                       >
-                        <VictoryLine 
-                          data={data.chartData.slice(-10)} 
-                          style={{ 
-                            data: { 
-                              stroke: "#FFFFFF", 
-                              strokeWidth: 2 
-                            } 
-                          }} 
-                          animate={{ duration: 500 }}
-                        />
+                        <VictoryAxis dependentAxis tickFormat={(t: number) => `$${(t / 1000).toFixed(1)}k`} />
+                        <VictoryAxis />
+                        <VictoryBar data={monthlyMix} x="month" y="needs" />
                       </VictoryChart>
                     )}
                   </CompactChart>
@@ -471,45 +503,39 @@ export default function Insights() {
           {loadingAgg ? (
             <ActivityIndicator />
           ) : (
-            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-around", alignItems: "center" }}>
               {/* Current Allocation */}
-              <View style={{ flex: 1 }}>
+              <View style={{ alignItems: "center" }}>
                 <Text style={s.pieChartTitle}>Current</Text>
-                <CompactChart height={150}>
-                  {(w, h) => (
-                    <VictoryPie
-                      width={w} 
-                      height={h} 
-                      innerRadius={40} 
-                      padAngle={3} 
-                      labelRadius={h/2-20} 
-                      animate={{ duration: 700 }}
-                      data={pieChartData.current}
-                      colorScale={["#EF4444","#F59E0B","#10B981"]} // Red, Orange, Green
-                      labelComponent={<></>} // Hide labels on pie
-                    />
-                  )}
-                </CompactChart>
+                <View style={{ width: 150, height: 150 }}>
+                  <VictoryPie
+                    width={150}
+                    height={150}
+                    innerRadius={40}
+                    padAngle={2}
+                    animate={{ duration: 700 }}
+                    data={pieChartData.current}
+                    colorScale={["#EF4444", "#F59E0B", "#10B981"]}
+                    labels={() => null} // Remove labels for cleaner look
+                  />
+                </View>
               </View>
 
               {/* Goal Allocation */}
-              <View style={{ flex: 1 }}>
+              <View style={{ alignItems: "center" }}>
                 <Text style={s.pieChartTitle}>Goal</Text>
-                <CompactChart height={150}>
-                  {(w, h) => (
-                    <VictoryPie
-                      width={w} 
-                      height={h} 
-                      innerRadius={40} 
-                      padAngle={3} 
-                      labelRadius={h/2-20} 
-                      animate={{ duration: 700 }}
-                      data={pieChartData.goal}
-                      colorScale={["#246BFD","#5b76f7","#9db7ff"]} // Blue shades
-                      labelComponent={<></>} // Hide labels on pie
-                    />
-                  )}
-                </CompactChart>
+                <View style={{ width: 150, height: 150 }}>
+                  <VictoryPie
+                    width={150}
+                    height={150}
+                    innerRadius={40}
+                    padAngle={2}
+                    animate={{ duration: 700 }}
+                    data={pieChartData.goal}
+                    colorScale={["#246BFD", "#5b76f7", "#9db7ff"]}
+                    labels={() => null} // Remove labels for cleaner look
+                  />
+                </View>
               </View>
             </View>
           )}
@@ -550,68 +576,343 @@ export default function Insights() {
         </Card>
       </Animated.View>
 
-      {/* Monthly mix as bar chart */}
-      <Animated.View entering={FadeInUp.delay(220).duration(420)}>
-        <Card>
-          <Text style={s.h1}>Monthly Spending Trends</Text>
+      {/* Monthly mix as bar chart - FIXED */}
+      <Animated.View entering={FadeInUp.delay(220).duration(420)} style={{ zIndex: 10 }}>
+        <Card style={{ overflow: 'visible' }}>
+          <View style={s.sectionHeader}>
+            <Text style={s.h1}>Monthly Spending Trends</Text>
+            
+            {/* Fixed Dropdown Selector */}
+            <View style={s.dropdownContainer}>
+              <Pressable 
+                style={s.dropdownButton}
+                onPress={toggleDropdown}
+              >
+                <Text style={s.dropdownButtonText}>
+                  {selectedMonth === "All" ? "All Months" : selectedMonth}
+                </Text>
+                <Text style={s.dropdownArrow}>{dropdownOpen ? "▲" : "▼"}</Text>
+              </Pressable>
+              
+              {dropdownOpen && (
+                <View style={s.dropdownList}>
+                  <Pressable 
+                    style={s.dropdownItem}
+                    onPress={() => handleMonthSelect("All")}
+                  >
+                    <Text style={[
+                      s.dropdownItemText,
+                      selectedMonth === "All" && s.dropdownItemTextActive
+                    ]}>All Months</Text>
+                  </Pressable>
+                  {fallbackMonthly.map((month) => (
+                    <Pressable 
+                      key={month.month}
+                      style={s.dropdownItem}
+                      onPress={() => handleMonthSelect(month.month)}
+                    >
+                      <Text style={[
+                        s.dropdownItemText,
+                        selectedMonth === month.month && s.dropdownItemTextActive
+                      ]}>{month.month}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
+          </View>
+          
           {loadingAgg ? (
             <ActivityIndicator />
           ) : (
             <>
-              <CompactChart height={200}>
-                {(w, h) => (
+              {/* Stylized Bar Chart */}
+              <View style={{ height: 300, alignItems: 'center', marginTop: 16, zIndex: 1 }}>
+                {selectedMonth === "All" ? (
                   <VictoryChart 
-                    width={w} 
-                    height={h} 
-                    padding={{ left: 60, right: 20, top: 20, bottom: 40 }} 
-                    domainPadding={{ x: 20 }} 
-                    containerComponent={<VictoryContainer responsive={false} />} 
-                    animate={{ duration: 700 }}
+                    width={450}
+                    height={300}
+                    padding={{ left: 70, right: 30, top: 30, bottom: 50 }}
+                    domainPadding={{ x: 40, y: [0, 50] }}
+                    animate={{ duration: 800 }}
                   >
+                    {/* Stylized Grid */}
                     <VictoryAxis 
                       dependentAxis 
-                      tickFormat={(t: number) => `$${(t/1000).toFixed(1)}k`} 
+                      tickFormat={(t: number) => `${(t/1000).toFixed(1)}k`}
                       style={{ 
-                        grid: { stroke: "#EEF2F7" }, 
-                        tickLabels: { fontSize: 10, fill: "#6B7280" }
+                        grid: { 
+                          stroke: "#E5E7EB", 
+                          strokeDasharray: "3,3",
+                          strokeOpacity: 0.5
+                        }, 
+                        tickLabels: { 
+                          fontSize: 11, 
+                          fill: "#6B7280",
+                          fontWeight: "600"
+                        },
+                        axis: { stroke: "#D1D5DB", strokeWidth: 1 }
                       }} 
                     />
                     <VictoryAxis 
                       style={{ 
-                        tickLabels: { fontSize: 10, fill: "#6B7280" } 
+                        tickLabels: { 
+                          fontSize: 11, 
+                          fill: "#6B7280",
+                          fontWeight: "600"
+                        },
+                        axis: { stroke: "#D1D5DB", strokeWidth: 1 }
                       }} 
                     />
-                    <VictoryGroup offset={20} colorScale={["#EF4444", "#F59E0B", "#10B981"]}>
-                      <VictoryBar data={monthlyMix} x="month" y="needs" />
-                      <VictoryBar data={monthlyMix} x="month" y="wants" />
-                      <VictoryBar data={monthlyMix} x="month" y="savings" />
+                    
+                    {/* All months - grouped bars with better styling */}
+                    <VictoryGroup 
+                      offset={18} 
+                      colorScale={["#EF4444", "#F59E0B", "#10B981"]}
+                      animate={{ duration: 1000, onLoad: { duration: 500 } }}
+                    >
+                      <VictoryBar 
+                        data={fallbackMonthly} 
+                        x="month" 
+                        y="needs"
+                        barWidth={14}
+                        style={{
+                          data: { 
+                            fill: "#EF4444",
+                            fillOpacity: 0.9,
+                            stroke: "#DC2626",
+                            strokeWidth: 1
+                          }
+                        }}
+                        animate={{
+                          duration: 1000,
+                          onLoad: { duration: 500 }
+                        }}
+                      />
+                      <VictoryBar 
+                        data={fallbackMonthly} 
+                        x="month" 
+                        y="wants"
+                        barWidth={14}
+                        style={{
+                          data: { 
+                            fill: "#F59E0B",
+                            fillOpacity: 0.9,
+                            stroke: "#D97706",
+                            strokeWidth: 1
+                          }
+                        }}
+                        animate={{
+                          duration: 1000,
+                          onLoad: { duration: 700 }
+                        }}
+                      />
+                      <VictoryBar 
+                        data={fallbackMonthly} 
+                        x="month" 
+                        y="savings"
+                        barWidth={14}
+                        style={{
+                          data: { 
+                            fill: "#10B981",
+                            fillOpacity: 0.9,
+                            stroke: "#059669",
+                            strokeWidth: 1
+                          }
+                        }}
+                        animate={{
+                          duration: 1000,
+                          onLoad: { duration: 900 }
+                        }}
+                      />
+                    </VictoryGroup>
+                  </VictoryChart>
+                ) : (
+                  /* Single month view - show only that month's data */
+                  <VictoryChart 
+                    width={350}
+                    height={300}
+                    padding={{ left: 70, right: 30, top: 30, bottom: 50 }}
+                    domainPadding={{ x: 80, y: [0, 50] }}
+                    animate={{ duration: 800 }}
+                  >
+                    {/* Stylized Grid */}
+                    <VictoryAxis 
+                      dependentAxis 
+                      tickFormat={(t: number) => `${(t/1000).toFixed(1)}k`}
+                      style={{ 
+                        grid: { 
+                          stroke: "#E5E7EB", 
+                          strokeDasharray: "3,3",
+                          strokeOpacity: 0.5
+                        }, 
+                        tickLabels: { 
+                          fontSize: 11, 
+                          fill: "#6B7280",
+                          fontWeight: "600"
+                        },
+                        axis: { stroke: "#D1D5DB", strokeWidth: 1 }
+                      }} 
+                    />
+                    <VictoryAxis 
+                      style={{ 
+                        tickLabels: { 
+                          fontSize: 11, 
+                          fill: "#6B7280",
+                          fontWeight: "600"
+                        },
+                        axis: { stroke: "#D1D5DB", strokeWidth: 1 }
+                      }} 
+                    />
+                    
+                    {/* Single month - three bars side by side */}
+                    <VictoryGroup 
+                      offset={40} 
+                      colorScale={["#EF4444", "#F59E0B", "#10B981"]}
+                      animate={{ duration: 800 }}
+                    >
+                      <VictoryBar 
+                        data={[{ month: selectedMonth, amount: filteredMonthlyData[0]?.needs || 0 }]} 
+                        x="month" 
+                        y="amount"
+                        barWidth={30}
+                        style={{
+                          data: { 
+                            fill: "#EF4444",
+                            fillOpacity: 0.9,
+                            stroke: "#DC2626",
+                            strokeWidth: 2
+                          }
+                        }}
+                      />
+                      <VictoryBar 
+                        data={[{ month: selectedMonth, amount: filteredMonthlyData[0]?.wants || 0 }]} 
+                        x="month" 
+                        y="amount"
+                        barWidth={30}
+                        style={{
+                          data: { 
+                            fill: "#F59E0B",
+                            fillOpacity: 0.9,
+                            stroke: "#D97706",
+                            strokeWidth: 2
+                          }
+                        }}
+                      />
+                      <VictoryBar 
+                        data={[{ month: selectedMonth, amount: filteredMonthlyData[0]?.savings || 0 }]} 
+                        x="month" 
+                        y="amount"
+                        barWidth={30}
+                        style={{
+                          data: { 
+                            fill: "#10B981",
+                            fillOpacity: 0.9,
+                            stroke: "#059669",
+                            strokeWidth: 2
+                          }
+                        }}
+                      />
                     </VictoryGroup>
                   </VictoryChart>
                 )}
-              </CompactChart>
+              </View>
               
-              {/* Legend and totals */}
-              <View style={{ marginTop: 16, gap: 12 }}>
-                {monthlyMix.map((month, i) => {
+              {/* Enhanced Legend */}
+              <View style={s.chartLegend}>
+                <View style={s.legendRow}>
+                  <View style={s.legendItem}>
+                    <View style={[s.legendDot, { backgroundColor: "#EF4444" }]} />
+                    <Text style={s.legendText}>Needs</Text>
+                  </View>
+                  <View style={s.legendItem}>
+                    <View style={[s.legendDot, { backgroundColor: "#F59E0B" }]} />
+                    <Text style={s.legendText}>Wants</Text>
+                  </View>
+                  <View style={s.legendItem}>
+                    <View style={[s.legendDot, { backgroundColor: "#10B981" }]} />
+                    <Text style={s.legendText}>Savings</Text>
+                  </View>
+                </View>
+              </View>
+              
+              {/* Enhanced monthly breakdown */}
+              <View style={{ marginTop: 20, gap: 16 }}>
+                {filteredMonthlyData.map((month, i) => {
                   const total = month.needs + month.wants + month.savings;
                   return (
                     <View key={month.month} style={s.monthlyBreakdown}>
-                      <Text style={s.monthTitle}>{month.month}</Text>
+                      <View style={s.monthlyHeader}>
+                        <Text style={s.monthTitle}>{month.month} Summary</Text>
+                        <Text style={s.monthTotal}>Total: {formatMoney(total, currency)}</Text>
+                      </View>
+                      
+                      {/* Progress bars for each category */}
                       <View style={s.monthlyStats}>
-                        <View style={s.statItem}>
-                          <Text style={s.statLabel}>Needs</Text>
-                          <Text style={s.statAmount}>{formatMoney(month.needs, currency)}</Text>
-                          <Text style={s.statPercent}>{((month.needs / total) * 100).toFixed(0)}%</Text>
+                        <View style={s.statItemEnhanced}>
+                          <View style={s.statHeader}>
+                            <View style={s.legendItem}>
+                              <View style={[s.legendDot, { backgroundColor: "#EF4444" }]} />
+                              <Text style={s.statLabel}>Needs</Text>
+                            </View>
+                            <Text style={s.statAmount}>{formatMoney(month.needs, currency)}</Text>
+                          </View>
+                          <View style={s.progressBar}>
+                            <View 
+                              style={[
+                                s.progressFill, 
+                                { 
+                                  backgroundColor: "#EF4444", 
+                                  width: `${(month.needs / total) * 100}%` 
+                                }
+                              ]} 
+                            />
+                          </View>
+                          <Text style={s.statPercent}>{((month.needs / total) * 100).toFixed(0)}% of total</Text>
                         </View>
-                        <View style={s.statItem}>
-                          <Text style={s.statLabel}>Wants</Text>
-                          <Text style={s.statAmount}>{formatMoney(month.wants, currency)}</Text>
-                          <Text style={s.statPercent}>{((month.wants / total) * 100).toFixed(0)}%</Text>
+                        
+                        <View style={s.statItemEnhanced}>
+                          <View style={s.statHeader}>
+                            <View style={s.legendItem}>
+                              <View style={[s.legendDot, { backgroundColor: "#F59E0B" }]} />
+                              <Text style={s.statLabel}>Wants</Text>
+                            </View>
+                            <Text style={s.statAmount}>{formatMoney(month.wants, currency)}</Text>
+                          </View>
+                          <View style={s.progressBar}>
+                            <View 
+                              style={[
+                                s.progressFill, 
+                                { 
+                                  backgroundColor: "#F59E0B", 
+                                  width: `${(month.wants / total) * 100}%` 
+                                }
+                              ]} 
+                            />
+                          </View>
+                          <Text style={s.statPercent}>{((month.wants / total) * 100).toFixed(0)}% of total</Text>
                         </View>
-                        <View style={s.statItem}>
-                          <Text style={s.statLabel}>Savings</Text>
-                          <Text style={s.statAmount}>{formatMoney(month.savings, currency)}</Text>
-                          <Text style={s.statPercent}>{((month.savings / total) * 100).toFixed(0)}%</Text>
+                        
+                        <View style={s.statItemEnhanced}>
+                          <View style={s.statHeader}>
+                            <View style={s.legendItem}>
+                              <View style={[s.legendDot, { backgroundColor: "#10B981" }]} />
+                              <Text style={s.statLabel}>Savings</Text>
+                            </View>
+                            <Text style={s.statAmount}>{formatMoney(month.savings, currency)}</Text>
+                          </View>
+                          <View style={s.progressBar}>
+                            <View 
+                              style={[
+                                s.progressFill, 
+                                { 
+                                  backgroundColor: "#10B981", 
+                                  width: `${(month.savings / total) * 100}%` 
+                                }
+                              ]} 
+                            />
+                          </View>
+                          <Text style={s.statPercent}>{((month.savings / total) * 100).toFixed(0)}% of total</Text>
                         </View>
                       </View>
                     </View>
@@ -733,6 +1034,7 @@ const s = StyleSheet.create({
     fontSize: 11,
     color: "#6B7280"
   },  
+  
   // Pie chart styles
   pieChartTitle: {
     fontSize: 14,
@@ -752,7 +1054,6 @@ const s = StyleSheet.create({
   },
   legendDot: {
     width: 12,
-
     height: 12,
     borderRadius: 6
   },
@@ -770,40 +1071,159 @@ const s = StyleSheet.create({
     fontSize: 11,
     color: "#6B7280"
   },
-  // Monthly mix styles
-  monthlyBreakdown: {
-    borderTopWidth: 1,
-    borderTopColor: "#E5E7EB",
-    paddingTop: 12
-  },
-  monthTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    marginBottom: 8,
-    color: "#111827"
-  },
-  monthlyStats: {
-
+  
+  // Enhanced monthly mix styles
+  sectionHeader: {
     flexDirection: "row",
-    justifyContent: "space-between"
-  },
-  statItem: {
+    justifyContent: "space-between",
     alignItems: "center",
-    flex: 1
+    marginBottom: 8,
+    flexWrap: "wrap",
+    gap: 8,
   },
-  statLabel: {
+  
+  // Fixed dropdown styles
+  dropdownContainer: {
+    position: "relative",
+    zIndex: 9999,
+  },
+  dropdownButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#E5E7EB",
+    minWidth: 130,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  dropdownButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+    flex: 1,
+  },
+  dropdownArrow: {
     fontSize: 12,
     color: "#6B7280",
-    marginBottom: 4
+    marginLeft: 8,
+    fontWeight: "600",
+  },
+  dropdownList: {
+    position: "absolute",
+    top: "100%",
+    right: 0,
+    backgroundColor: "white",
+    borderWidth: 2,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    marginTop: 4,
+    minWidth: 160,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
+    zIndex: 10000,
+  },
+  dropdownItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  dropdownItemText: {
+    fontSize: 14,
+    color: "#374151",
+    fontWeight: "500",
+  },
+  dropdownItemTextActive: {
+    color: "#246BFD",
+    fontWeight: "700",
+  },
+  
+  // Enhanced chart styles
+  chartLegend: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+  },
+  legendRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+  },
+  legendText: {
+    fontSize: 13,
+    color: "#374151",
+    fontWeight: "600",
+  },
+  
+  // Enhanced monthly breakdown styles
+  monthlyBreakdown: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  monthlyHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  monthTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827"
+  },
+  monthTotal: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#059669",
+  },
+  monthlyStats: {
+    gap: 16,
+  },
+  statItemEnhanced: {
+    gap: 8,
+  },
+  statHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  statLabel: {
+    fontSize: 13,
+    color: "#374151",
+    fontWeight: "600",
   },
   statAmount: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#111827",
-    marginBottom: 2
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 4,
   },
   statPercent: {
-    fontSize: 11,
-    color: "#6B7280"
-  }
+    fontSize: 12,
+    color: "#6B7280",
+    textAlign: "right",
+  },
 });

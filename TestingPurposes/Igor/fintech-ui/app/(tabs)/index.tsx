@@ -26,6 +26,7 @@ import Svg, {
 import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Reanimated, { FadeInDown, FadeInUp } from "react-native-reanimated";
+import { useAuth } from "@/store/auth";
 
 /* ================= Mock data ================= */
 const accounts = [
@@ -79,8 +80,6 @@ const initialTx: Tx[] = [
   },
 ];
 
-const CARD_HOLDER = "Viorel Bostan";
-
 /* ================= Theme ================= */
 const UI = {
   bg: "#F2F5FB",
@@ -92,6 +91,13 @@ const UI = {
 };
 
 const W = Dimensions.get("window").width;
+// preferred font for the chart text
+const CHART_FONT =
+  Platform.OS === "android"
+    ? "Roboto"
+    : Platform.OS === "ios"
+      ? "System"
+      : "system-ui";
 
 /* ================= (Optional) payments bus ================= */
 export const PaymentsBus = {
@@ -148,8 +154,8 @@ function useSeriesFromTx(tx: Tx[]) {
       starts.push(d);
     }
     const series = labels.map((label, idx) => {
-      const start = starts[idx];
-      const end = new Date(start);
+      const start = starts[idx],
+        end = new Date(start);
       end.setDate(start.getDate() + 1);
       const total = tx
         .filter((t) => {
@@ -176,14 +182,14 @@ function spline(points: { x: number; y: number }[], smooth = 0.2) {
     a: { x: number; y: number }[],
   ) => {
     if (i === 0) return `M ${p.x} ${p.y}`;
-    const prev = a[i - 1];
-    const next = a[i + 1] || p;
-    const dx = next.x - prev.x;
-    const dy = next.y - prev.y;
-    const c1x = prev.x + dx * smooth;
-    const c1y = prev.y + dy * smooth;
-    const c2x = p.x - dx * smooth;
-    const c2y = p.y - dy * smooth;
+    const prev = a[i - 1],
+      next = a[i + 1] || p;
+    const dx = next.x - prev.x,
+      dy = next.y - prev.y;
+    const c1x = prev.x + dx * smooth,
+      c1y = prev.y + dy * smooth;
+    const c2x = p.x - dx * smooth,
+      c2y = p.y - dy * smooth;
     return `C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p.x} ${p.y}`;
   };
   return points.map(seg).join(" ");
@@ -194,11 +200,13 @@ function OverviewChart({
   maxIdx,
   height = 210,
   padding = 18,
+  fontFamily = CHART_FONT,
 }: {
   series: { label: string; value: number }[];
   maxIdx: number;
   height?: number;
   padding?: number;
+  fontFamily?: string;
 }) {
   const width = W - 32;
   if (!series || series.length < 2)
@@ -230,6 +238,25 @@ function OverviewChart({
   const tickVals = Array.from({ length: yTicks + 1 }, (_, i) =>
     Math.round((max / yTicks) * i),
   );
+
+  const yLabelStyle = {
+    fontSize: 11,
+    fontWeight: "600" as const,
+    fill: "#64748B",
+    fontFamily,
+  };
+  const xLabelStyle = {
+    fontSize: 11,
+    fontWeight: "600" as const,
+    fill: "#64748B",
+    fontFamily,
+  };
+  const chipStyle = {
+    fontSize: 11,
+    fontWeight: "700" as const,
+    fill: "#fff",
+    fontFamily,
+  };
 
   return (
     <View
@@ -264,8 +291,7 @@ function OverviewChart({
                 <SvgText
                   x={padding - 6}
                   y={y + 4}
-                  fontSize="10"
-                  fill="#94A3B8"
+                  {...yLabelStyle}
                   textAnchor="end"
                 >
                   {fmt(v)}
@@ -316,32 +342,18 @@ function OverviewChart({
           />
           <Circle cx={a.x} cy={a.y} r={9} fill="#fff" />
           <Circle cx={a.x} cy={a.y} r={5} fill="#6F86FF" />
-          <G x={Math.min(a.x + 8, width - 120)} y={Math.max(a.y - 28, 8)}>
-            <Rect width={112} height={26} rx={13} fill="#6F86FF" />
-            <SvgText
-              x={56}
-              y={16}
-              fill="#fff"
-              fontSize="11"
-              fontWeight="700"
-              textAnchor="middle"
-            >
+          <G x={Math.min(a.x + 8, width - 128)} y={Math.max(a.y - 28, 8)}>
+            <Rect width={120} height={26} rx={13} fill="#6F86FF" />
+            <SvgText x={60} y={16} {...chipStyle} textAnchor="middle">
               {fmt(series[active].value)} • {series[active].label}
             </SvgText>
           </G>
         </G>
 
         {/* peak chip */}
-        <G x={Math.min(peak.x + 8, width - 60)} y={Math.max(peak.y - 26, 8)}>
-          <Rect width={56} height={22} rx={11} fill="#6F86FF" />
-          <SvgText
-            x={28}
-            y={14}
-            fill="#fff"
-            fontSize="11"
-            fontWeight="700"
-            textAnchor="middle"
-          >
+        <G x={Math.min(peak.x + 8, width - 64)} y={Math.max(peak.y - 26, 8)}>
+          <Rect width={60} height={22} rx={11} fill="#6F86FF" />
+          <SvgText x={30} y={14} {...chipStyle} textAnchor="middle">
             {fmt(series[maxIdx].value)}
           </SvgText>
         </G>
@@ -363,10 +375,9 @@ function useTxHistory() {
 /* ================= Screen ================= */
 export default function Dashboard() {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth(); // ← get name/email/avatarUrl from store
 
-  // RN Animated values for scroll-driven transforms
   const y = React.useRef(new RNAnimated.Value(0)).current;
-
   const [menuVisible, setMenuVisible] = React.useState(false);
   const { tx } = useTxHistory();
   const { series, maxIdx } = useSeriesFromTx(tx);
@@ -381,18 +392,23 @@ export default function Dashboard() {
     outputRange: [1, 0.965],
     extrapolate: "clamp",
   });
-
   const onScroll = RNAnimated.event(
     [{ nativeEvent: { contentOffset: { y } } }],
     { useNativeDriver: true },
   );
 
-  const avatar = { uri: "https://i.pravatar.cc/100?img=12" };
+  // derived identity for header
+  const displayName =
+    (user?.name && String(user.name)) ||
+    (user?.email && String(user.email).split("@")[0]) ||
+    "Guest";
+  const avatarSrc = user?.avatarUrl
+    ? { uri: user.avatarUrl }
+    : { uri: "https://i.pravatar.cc/100?img=12" };
 
-  // Main list: header sections in ListHeaderComponent, tx items as rows
   return (
     <View style={[styles.root, { paddingTop: insets.top + 6 }]}>
-      {/* Header — layout animation separated from RN transforms */}
+      {/* Header — Reanimated entering, RN transform */}
       <Reanimated.View entering={FadeInDown.duration(240)}>
         <RNAnimated.View
           style={[
@@ -402,12 +418,12 @@ export default function Dashboard() {
         >
           <View style={styles.pillHeader}>
             <View style={styles.avatarWrap}>
-              <Image source={avatar} style={styles.avatarImg} />
+              <Image source={avatarSrc} style={styles.avatarImg} />
             </View>
 
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={styles.greetingMuted}>Welcome,</Text>
-              <Text style={styles.greetingName}>{CARD_HOLDER}</Text>
+              <Text style={styles.greetingName}>{displayName}</Text>
             </View>
 
             <TouchableOpacity
@@ -434,7 +450,9 @@ export default function Dashboard() {
           onPress={() => setMenuVisible(false)}
         />
         <View style={styles.menu}>
-          <Text style={styles.menuEmail}>user@example.com</Text>
+          <Text style={styles.menuEmail}>
+            {user?.email || "user@example.com"}
+          </Text>
           <TouchableOpacity
             style={styles.menuItem}
             onPress={() => setMenuVisible(false)}
@@ -445,14 +463,13 @@ export default function Dashboard() {
         </View>
       </Modal>
 
-      {/* Main scroller: FlatList (animated) */}
+      {/* Main scroller as Animated FlatList */}
       <RNAnimated.FlatList
         data={tx}
         keyExtractor={(i) => i.id}
         onScroll={onScroll}
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: 100 }}
-        // Header contains the non-virtualized sections
         ListHeaderComponent={
           <>
             {/* My Cards */}
@@ -520,7 +537,7 @@ export default function Dashboard() {
                                   Card Holder
                                 </Text>
                                 <Text style={styles.holderLight}>
-                                  {CARD_HOLDER}
+                                  {displayName}
                                 </Text>
                               </View>
                             </View>
@@ -579,10 +596,10 @@ export default function Dashboard() {
               </View>
             </Reanimated.View>
 
-            {/* Transaction header label */}
+            {/* Transaction section label */}
             <Reanimated.View
               entering={FadeInUp.delay(160).duration(320)}
-              style={{ marginTop: 6, paddingHorizontal: 0 }}
+              style={{ marginTop: 6 }}
             >
               <View style={[styles.rowBetween, { paddingHorizontal: 16 }]}>
                 <Text style={styles.section}>Transaction History</Text>
@@ -591,11 +608,9 @@ export default function Dashboard() {
             </Reanimated.View>
           </>
         }
-        // Render each transaction row
         renderItem={({ item }) => {
           const d = new Date(item.ts);
           const dateStr = ddmm(d);
-
           let iconEl: React.ReactNode = (
             <Ionicons name="receipt-outline" size={18} />
           );
@@ -608,12 +623,7 @@ export default function Dashboard() {
             iconEl = <FontAwesome5 name="spotify" size={18} />;
 
           return (
-            <View
-              style={{
-                paddingHorizontal: 16,
-                paddingTop: 8,
-              }}
-            >
+            <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
               <View
                 style={[
                   styles.shadowLg,
@@ -786,20 +796,11 @@ const styles = StyleSheet.create({
       android: { elevation: 10 },
     }),
   },
-  cardInner: {
-    borderRadius: 24,
-    overflow: "hidden",
-  },
-  cardGradient: {
-    padding: 18,
-    minHeight: 150,
-  },
+  cardInner: { borderRadius: 24, overflow: "hidden" },
+  cardGradient: { padding: 18, minHeight: 150 },
 
   /* modal */
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.2)",
-  },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.2)" },
   menu: {
     position: "absolute",
     right: 16,

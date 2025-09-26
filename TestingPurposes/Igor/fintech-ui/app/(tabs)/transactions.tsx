@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   Modal,
   RefreshControl,
+  Alert,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -19,12 +21,36 @@ import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 
 import Card from "@/components/Card";
-import { useTransactions } from "@/state/transactions";
 import { MOCK_RECEIPT, type ParsedReceipt } from "@/lib/receipt-mock";
+import { supabase } from "../../api";
+import { useAuth } from "@/store/auth";
 
 const USE_MOCK = true;
 
-// ---- currency (MDL)
+/* ============== Types ============== */
+type TxRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  merchant?: string | null;
+  amount: number; // negative = expense
+  currency: string; // "MDL"
+  category: string;
+  date: string; // ISO
+  meta?: any;
+  created_at?: string;
+};
+
+type Category =
+  | "Groceries"
+  | "Fuel"
+  | "Utilities"
+  | "Health"
+  | "Transport"
+  | "Shopping"
+  | "General";
+
+/* ============== currency (MDL) ============== */
 const nfMDL = (globalThis as any).Intl?.NumberFormat
   ? new Intl.NumberFormat("ro-MD", { style: "currency", currency: "MDL" })
   : null;
@@ -36,9 +62,9 @@ function fmtMDL(n: number, withSign = false) {
   return `${sign}${core}`;
 }
 
-// ---- helpers
+/* ============== helpers ============== */
 const normalize = (s: string) => s.replace(/\s{2,}/g, " ").trim();
-const guessCategory = (merchant: string) => {
+const guessCategory = (merchant: string): Category => {
   const m = merchant.toUpperCase();
   if (/(KAUFLAND|LINELLA|GREEN HILLS|SUPERMARKET|MARKET)/.test(m))
     return "Groceries";
@@ -57,21 +83,167 @@ const totalOf = (p: ParsedReceipt) =>
     )) ||
   0;
 
+const CATEGORIES: Category[] = [
+  "General",
+  "Groceries",
+  "Fuel",
+  "Utilities",
+  "Health",
+  "Transport",
+  "Shopping",
+];
+
+/* ============== Component ============== */
 export default function Transactions() {
   const insets = useSafeAreaInsets();
-  const list = useTransactions((s) => s.list);
-  const addTx = useTransactions((s) => s.add);
+  const { user } = useAuth();
 
+  // ---- list + paging
+  const [list, setList] = React.useState<TxRow[]>([]);
+  const [loading, setLoading] = React.useState(false); // start false to avoid spinner lock
   const [refreshing, setRefreshing] = React.useState(false);
-  const [scanOpen, setScanOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
+  const [hasMore, setHasMore] = React.useState(true);
+  const PAGE_SIZE = 20;
+
+  // ---- scan modal
+  const [scanOpen, setScanOpen] = React.useState(false);
   const [imageUri, setImageUri] = React.useState<string | null>(null);
   const [parsed, setParsed] = React.useState<ParsedReceipt | null>(null);
 
-  function onRefresh() {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 600);
+  // ---- filters
+  const [activeCat, setActiveCat] = React.useState<Category | "ALL">("ALL");
+  const [month, setMonth] = React.useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+
+  // ---- computed
+  const filtered = React.useMemo(() => {
+    const [y, m] = month.split("-").map(Number);
+    const mStart = new Date(y, (m || 1) - 1, 1).getTime();
+    const mEnd = new Date(y, m || 1, 1).getTime();
+    return list.filter((t) => {
+      const ts = new Date(t.date).getTime();
+      const inMonth = ts >= mStart && ts < mEnd;
+      const inCat = activeCat === "ALL" || t.category === activeCat;
+      return inMonth && inCat;
+    });
+  }, [list, activeCat, month]);
+
+  const totalToday = React.useMemo(() => {
+    const today = new Date().toDateString();
+    return filtered
+      .filter((t) => new Date(t.date).toDateString() === today)
+      .reduce((s, t) => s + t.amount, 0);
+  }, [filtered]);
+
+  const countAll = filtered.length;
+
+  // ---- user id
+  const [userId, setUserId] = React.useState<string | null>(
+    user?.userId ?? null,
+  );
+  React.useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (user?.userId) {
+        setUserId(user.userId);
+        return;
+      }
+      const { data } = await supabase.auth.getUser();
+      if (mounted) setUserId(data.user?.id ?? null);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [user?.userId]);
+
+  // ---- initial load + realtime
+  React.useEffect(() => {
+    if (!userId) {
+      setLoading(false); // avoid infinite spinner while auth resolves
+      return;
+    }
+
+    loadPage(true).catch(() => setLoading(false));
+
+    const ch = supabase
+      .channel("tx_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "transactions",
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setList((p) => [payload.new as any as TxRow, ...p]);
+          } else if (payload.eventType === "DELETE") {
+            setList((p) => p.filter((t) => t.id !== (payload.old as any).id));
+          } else if (payload.eventType === "UPDATE") {
+            setList((p) =>
+              p.map((t) =>
+                t.id === (payload.new as any).id
+                  ? (payload.new as any as TxRow)
+                  : t,
+              ),
+            );
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ch);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
+  async function loadPage(reset = false) {
+    if (!userId) return;
+
+    if (!reset && loading) return;
+
+    if (reset) {
+      setLoading(true);
+      setHasMore(true);
+    }
+
+    try {
+      const from = reset ? 0 : list.length;
+      const to = from + PAGE_SIZE - 1;
+
+      const { data, error } = await supabase
+        .from("transactions")
+        .select("*")
+        .eq("user_id", userId)
+        .order("date", { ascending: false })
+        .range(from, to);
+
+      if (error) throw error;
+
+      if (reset) setList((data || []) as TxRow[]);
+      else setList((p) => [...p, ...(data as TxRow[])]);
+
+      if (!data || data.length < PAGE_SIZE) setHasMore(false);
+    } catch (e: any) {
+      console.error(e);
+      Alert.alert("Load failed", e?.message ?? "Unknown error");
+    } finally {
+      setLoading(false);
+    }
   }
+
+  async function onRefresh() {
+    if (!userId) return;
+    setRefreshing(true);
+    await loadPage(true);
+    setRefreshing(false);
+  }
+
   function openScan() {
     setScanOpen(true);
     setImageUri(null);
@@ -82,23 +254,53 @@ export default function Transactions() {
   }
 
   async function pickImage() {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") return;
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaType.Images,
-      quality: 0.9,
-      base64: true,
-    });
-    if (!res.canceled && res.assets?.[0]?.uri) await runScan(res.assets[0].uri);
+    try {
+      if (Platform.OS !== "web") {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (perm.status !== "granted") {
+          Alert.alert(
+            "Photos blocked",
+            "Allow Photos access to attach receipts.",
+          );
+          return;
+        }
+      }
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images, // correct enum
+        quality: 0.9,
+        base64: true,
+        allowsMultipleSelection: false,
+        exif: false,
+      });
+      if (!res.canceled && res.assets?.[0]?.uri)
+        await runScan(res.assets[0].uri);
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Picker error", "Failed to open the photo library.");
+    }
   }
   async function takePhoto() {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") return;
-    const res = await ImagePicker.launchCameraAsync({
-      quality: 0.9,
-      base64: true,
-    });
-    if (!res.canceled && res.assets?.[0]?.uri) await runScan(res.assets[0].uri);
+    try {
+      if (Platform.OS !== "web") {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (perm.status !== "granted") {
+          Alert.alert(
+            "Camera blocked",
+            "Allow Camera access to scan receipts.",
+          );
+          return;
+        }
+      }
+      const res = await ImagePicker.launchCameraAsync({
+        quality: 0.9,
+        base64: true,
+      });
+      if (!res.canceled && res.assets?.[0]?.uri)
+        await runScan(res.assets[0].uri);
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Camera error", "Failed to open the camera.");
+    }
   }
   async function runScan(uri: string) {
     setBusy(true);
@@ -111,35 +313,93 @@ export default function Transactions() {
         setParsed(MOCK_RECEIPT);
         return;
       }
-      // TODO hook OCR
+      // TODO: OCR → parse → setParsed(parsedReceipt)
     } finally {
       setBusy(false);
     }
   }
 
-  function addParsedAsTransaction() {
-    if (!parsed) return;
+  async function addParsedAsTransaction() {
+    if (!parsed || !userId) return;
     const merchant = normalize(parsed.merchant);
-    const tx = {
-      id: String(Date.now()),
+    const row: Omit<TxRow, "id"> = {
+      user_id: userId,
       name: merchant,
+      merchant,
       date: new Date().toISOString(),
       amount: -Number(totalOf(parsed).toFixed(2)),
+      currency: "MDL",
       category: guessCategory(merchant),
       meta: parsed,
     };
-    addTx(tx);
+    const { data, error } = await supabase
+      .from("transactions")
+      .insert(row)
+      .select()
+      .single();
+    if (error) {
+      Alert.alert("Error", error.message);
+      return;
+    }
+    setList((p) => [data as TxRow, ...p]);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
       () => {},
     );
     setScanOpen(false);
   }
 
-  const totalToday = list
-    .filter(
-      (t) => new Date(t.date).toDateString() === new Date().toDateString(),
-    )
-    .reduce((s, t) => s + t.amount, 0);
+  async function addManual() {
+    if (!userId) return;
+    const row: Omit<TxRow, "id"> = {
+      user_id: userId,
+      name: "Manual Entry",
+      merchant: null,
+      date: new Date().toISOString(),
+      amount: -123.45,
+      currency: "MDL",
+      category: "General",
+      meta: null,
+    };
+    const { data, error } = await supabase
+      .from("transactions")
+      .insert(row)
+      .select()
+      .single();
+    if (error) {
+      Alert.alert("Error", error.message);
+      return;
+    }
+    setList((p) => [data as TxRow, ...p]);
+  }
+
+  async function deleteTx(id: string) {
+    Alert.alert("Delete", "Remove this transaction?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          const { error } = await supabase
+            .from("transactions")
+            .delete()
+            .eq("id", id);
+          if (error) Alert.alert("Error", error.message);
+        },
+      },
+    ]);
+  }
+
+  function loadMoreIfNeeded(e: any) {
+    if (!hasMore || loading) return;
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    const paddingToBottom = 200;
+    if (
+      layoutMeasurement.height + contentOffset.y >=
+      contentSize.height - paddingToBottom
+    ) {
+      loadPage(false);
+    }
+  }
 
   return (
     <View style={[s.root, { paddingTop: insets.top + 6 }]}>
@@ -147,7 +407,6 @@ export default function Transactions() {
       <Animated.View entering={FadeInDown.duration(360)} style={s.headerWrap}>
         <Text style={s.h1}>Transactions</Text>
 
-        {/* pill + (two icons wide) */}
         <Pressable
           onPress={openScan}
           style={({ pressed }) => [
@@ -165,6 +424,14 @@ export default function Transactions() {
           </LinearGradient>
         </Pressable>
       </Animated.View>
+
+      {/* tiny status (debug) */}
+      <View style={{ paddingHorizontal: 16, marginBottom: 6 }}>
+        <Text style={{ color: "#6B7280", fontSize: 12 }}>
+          userId: {userId ? "ok" : "none"} · loading: {String(loading)} · rows:{" "}
+          {list.length}
+        </Text>
+      </View>
 
       {/* KPIs */}
       <Animated.View
@@ -185,10 +452,104 @@ export default function Transactions() {
         </Card>
         <Card style={[s.kpiCard, { flex: 1 }]}>
           <Text style={s.kpiLabel}>Count</Text>
-          <Text style={s.kpiValue}>{list.length}</Text>
-          <Text style={s.kpiSub}>All transactions</Text>
+          <Text style={s.kpiValue}>{countAll}</Text>
+          <Text style={s.kpiSub}>Filtered</Text>
         </Card>
       </Animated.View>
+
+      {/* Filters */}
+      <Animated.View
+        entering={FadeInUp.delay(60).duration(320)}
+        style={s.filtersRow}
+      >
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
+        >
+          {(["ALL", ...CATEGORIES] as (Category | "ALL")[]).map((c) => (
+            <Pressable
+              key={c}
+              onPress={() => setActiveCat(c)}
+              style={({ pressed }) => [
+                s.chip,
+                activeCat === c && s.chipActive,
+                pressed && { opacity: 0.9 },
+              ]}
+            >
+              <Text style={[s.chipText, activeCat === c && s.chipTextActive]}>
+                {c}
+              </Text>
+            </Pressable>
+          ))}
+          {/* month switcher */}
+          <Pressable
+            onPress={() => setMonth(shiftMonth(month, -1))}
+            style={s.monthBtn}
+          >
+            <Ionicons name="chevron-back" size={16} color="#111827" />
+          </Pressable>
+          <View style={s.monthBadge}>
+            <Text style={s.monthText}>{fmtMonth(month)}</Text>
+          </View>
+          <Pressable
+            onPress={() => setMonth(shiftMonth(month, +1))}
+            style={s.monthBtn}
+          >
+            <Ionicons name="chevron-forward" size={16} color="#111827" />
+          </Pressable>
+        </ScrollView>
+      </Animated.View>
+
+      {/* List */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 10 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        showsVerticalScrollIndicator={false}
+        onScroll={loadMoreIfNeeded}
+        scrollEventThrottle={120}
+      >
+        {loading && list.length === 0 ? (
+          <View style={[s.card, { alignItems: "center", gap: 8 }]}>
+            <ActivityIndicator />
+            <Text style={{ color: "#6B7280" }}>Loading…</Text>
+          </View>
+        ) : filtered.length === 0 ? (
+          <EmptyState onScan={openScan} onAdd={addManual} />
+        ) : (
+          filtered.map((t) => (
+            <Pressable key={t.id} onLongPress={() => deleteTx(t.id)}>
+              <Card>
+                <View style={s.row}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.title}>{t.name}</Text>
+                    <Text style={s.sub}>
+                      {new Date(t.date).toLocaleString()} • {t.category}
+                    </Text>
+                  </View>
+                  <Text
+                    style={[
+                      s.amount,
+                      { color: t.amount < 0 ? "#ef4444" : "#16a34a" },
+                    ]}
+                  >
+                    {fmtMDL(t.amount, t.amount >= 0)}
+                  </Text>
+                </View>
+              </Card>
+            </Pressable>
+          ))
+        )}
+
+        {!loading && hasMore && (
+          <View style={{ alignItems: "center", paddingTop: 8 }}>
+            <ActivityIndicator />
+          </View>
+        )}
+      </ScrollView>
 
       {/* Quick actions */}
       <Animated.View
@@ -205,52 +566,9 @@ export default function Transactions() {
           icon="add-circle-outline"
           label="Add manual"
           hint="Custom entry"
-          onPress={() =>
-            addTx({
-              id: String(Date.now()),
-              name: "Manual Entry",
-              date: new Date().toISOString(),
-              amount: -123.45, // in MDL
-              category: "General",
-            })
-          }
+          onPress={addManual}
         />
       </Animated.View>
-
-      {/* List */}
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 10 }}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        showsVerticalScrollIndicator={false}
-      >
-        {list.length === 0 ? (
-          <EmptyState onScan={openScan} />
-        ) : (
-          list.map((t) => (
-            <Card key={t.id}>
-              <View style={s.row}>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.title}>{t.name}</Text>
-                  <Text style={s.sub}>
-                    {new Date(t.date).toLocaleString()} • {t.category}
-                  </Text>
-                </View>
-                <Text
-                  style={[
-                    s.amount,
-                    { color: t.amount < 0 ? "#ef4444" : "#16a34a" },
-                  ]}
-                >
-                  {fmtMDL(t.amount, t.amount >= 0)}
-                </Text>
-              </View>
-            </Card>
-          ))
-        )}
-      </ScrollView>
 
       {/* Scan / Review modal */}
       <Modal
@@ -360,6 +678,8 @@ export default function Transactions() {
   );
 }
 
+/* ---------- Subcomponents ---------- */
+
 function ActionTile({
   icon,
   label,
@@ -420,33 +740,68 @@ function InfoBanner({ text }: { text: string }) {
   );
 }
 
-function EmptyState({ onScan }: { onScan: () => void }) {
+function EmptyState({
+  onScan,
+  onAdd,
+}: {
+  onScan: () => void;
+  onAdd: () => void;
+}) {
   return (
     <View style={[s.card, { alignItems: "center", gap: 8 }]}>
       <Ionicons name="receipt-outline" size={24} color="#246BFD" />
-      <Text style={{ fontWeight: "800" }}>No transactions yet</Text>
+      <Text style={{ fontWeight: "800" }}>No transactions</Text>
       <Text style={{ color: "#6B7280", textAlign: "center" }}>
-        Scan a receipt to create your first transaction.
+        Scan a receipt or add an entry.
       </Text>
-      <Pressable
-        onPress={onScan}
-        style={({ pressed }) => [s.primary, pressed && { opacity: 0.9 }]}
-      >
-        <LinearGradient
-          colors={["#3bb2f6", "#5b76f7"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[s.primaryBg, { paddingHorizontal: 18 }]}
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <Pressable
+          onPress={onScan}
+          style={({ pressed }) => [s.primary, pressed && { opacity: 0.9 }]}
         >
-          <Ionicons name="scan-outline" size={18} color="#fff" />
-          <Text style={s.primaryText}>Scan receipt</Text>
-        </LinearGradient>
-      </Pressable>
+          <LinearGradient
+            colors={["#3bb2f6", "#5b76f7"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[s.primaryBg, { paddingHorizontal: 18 }]}
+          >
+            <Ionicons name="scan-outline" size={18} color="#fff" />
+            <Text style={s.primaryText}>Scan</Text>
+          </LinearGradient>
+        </Pressable>
+        <Pressable
+          onPress={onAdd}
+          style={({ pressed }) => [s.primary, pressed && { opacity: 0.9 }]}
+        >
+          <LinearGradient
+            colors={["#10b981", "#059669"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[s.primaryBg, { paddingHorizontal: 18 }]}
+          >
+            <Ionicons name="add" size={18} color="#fff" />
+            <Text style={s.primaryText}>Add</Text>
+          </LinearGradient>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
-// ---- styles (unchanged except headerPlus*)
+/* ---------- Month helpers ---------- */
+function shiftMonth(ym: string, delta: number) {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(y, (m || 1) - 1, 1);
+  d.setMonth(d.getMonth() + delta);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+function fmtMonth(ym: string) {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(y, (m || 1) - 1, 1);
+  return d.toLocaleString(undefined, { month: "long", year: "numeric" });
+}
+
+/* ---------- styles ---------- */
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#F5F7FB" },
 
@@ -476,6 +831,8 @@ const s = StyleSheet.create({
     elevation: 6,
   },
 
+  // debug chip area uses default text styling
+
   kpisRow: {
     flexDirection: "row",
     gap: 12,
@@ -487,7 +844,49 @@ const s = StyleSheet.create({
   kpiValue: { fontSize: 20, fontWeight: "800", marginTop: 2 },
   kpiSub: { color: "#6B7280", fontSize: 12, marginTop: 2 },
 
-  actionsRow: { paddingHorizontal: 16, marginTop: 8, gap: 10 },
+  filtersRow: { marginTop: 6 },
+  chip: {
+    backgroundColor: "#fff",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  chipActive: { backgroundColor: "#EEF4FF", borderColor: "#246BFD" },
+  chipText: { color: "#111827", fontWeight: "700" },
+  chipTextActive: { color: "#246BFD" },
+  monthBtn: {
+    backgroundColor: "#fff",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginLeft: 6,
+  },
+  monthBadge: {
+    backgroundColor: "#fff",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    paddingHorizontal: 12,
+    justifyContent: "center",
+    marginLeft: 4,
+  },
+  monthText: { color: "#111827", fontWeight: "800" },
+
+  actionsRow: {
+    paddingHorizontal: 16,
+    position: "absolute",
+    bottom: 16,
+    left: 0,
+    right: 0,
+    gap: 10,
+  },
+
   tile: {
     backgroundColor: "#fff",
     borderRadius: 14,
