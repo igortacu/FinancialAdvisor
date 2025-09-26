@@ -19,10 +19,8 @@ import * as Google from "expo-auth-session/providers/google";
 import { router } from "expo-router";
 import { useAuth } from "@/store/auth";
 import { LinearGradient } from "expo-linear-gradient";
-import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
 import Animated, { FadeInUp, FadeInDown, FadeOutDown } from "react-native-reanimated";
-
 // Types
 
 type Screen = "welcome" | "register" | "login";
@@ -77,7 +75,7 @@ export default function AuthScreen(): React.ReactElement {
           name: userInfo.name,
           avatarUrl: userInfo.picture,
         });
-        router.replace("/(tabs)");
+        router.replace("/cont");
       })();
     }
   }, [userInfo]);
@@ -153,8 +151,8 @@ export default function AuthScreen(): React.ReactElement {
       }
 
       Alert.alert("Success", "Account created. Confirm via email.");
-      setScreen("login");
-    } catch (error: any) {
+      router.replace("/cont"); 
+   } catch (error: any) {
       Alert.alert("Registration Failed", error?.message ?? "Unknown error");
     } finally {
       setIsLoading(false);
@@ -184,7 +182,7 @@ export default function AuthScreen(): React.ReactElement {
       setEmail("");
       setPassword("");
       setIsLoading(false);
-      router.replace("/(tabs)");
+      router.replace("/cont"); 
     } catch (error: any) {
       const msg = String(error?.message ?? "Login failed");
       Alert.alert(
@@ -400,15 +398,7 @@ export default function AuthScreen(): React.ReactElement {
         </View>
       )}
 
-      {/* Decorative Gradients */}
-      {/* <LinearGradient
-        colors={["rgba(99,102,241,0.25)", "transparent"]}
-        style={[styles.glow, { top: -40, left: -80 }]}
-      />
-      <LinearGradient
-        colors={["rgba(16,185,129,0.25)", "transparent"]}
-        style={[styles.glow, { bottom: -60, right: -60 }]}
-      /> */}
+
     </ImageBackground>
     
   );

@@ -6,11 +6,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Dimensions,
+  ImageBackground,
 } from "react-native";
 import MultiSlider from "@ptomasroos/react-native-multi-slider";
 import { Ionicons } from "@expo/vector-icons";
-
+import { Alert } from "react-native";
+import { router } from "expo-router";
 type Spending = {
   rent: number;
   utilities: number;
@@ -23,8 +24,6 @@ type Income = {
 };
 
 type FormData = {
-  name: string;
-  phone: string;
   finances: string;
   income: Income;
   lifeSituation: string;
@@ -45,8 +44,6 @@ type StyledButtonProps = {
 export default function MultiStepForm() {
   const [step, setStep] = useState<number>(1);
   const [formData, setFormData] = useState<FormData>({
-    name: "",
-    phone: "",
     finances: "",
     income: {
       from: 1000,
@@ -69,13 +66,69 @@ export default function MultiStepForm() {
     { key: "transportation", label: "Transportation" },
     { key: "other", label: "Other bills" },
   ];
-
+  const [cardWidth, setCardWidth] = useState(0);
   const handleIncomeChange = (values: number[]) => {
     // values[0] = from, values[1] = to
     setFormData({ ...formData, income: { from: values[0], to: values[1] } });
   };
   const nextStep = () => setStep((prev) => prev + 1);
   const prevStep = () => setStep((prev) => prev - 1);
+
+
+const validateStep = () => {
+  if (step === 1) {
+    if (!formData.finances.trim()) {
+      Alert.alert("Required", "Please enter your finances.");
+      return false;
+    }
+    if (formData.income.from <= 0 && formData.income.to <= 0) {
+      Alert.alert("Required", "Please select your income range.");
+      return false;
+    }
+  }
+
+  if (step === 2) {
+    if (!formData.lifeSituation) {
+      Alert.alert("Required", "Please select your life situation.");
+      return false;
+    }
+  }
+
+  if (step === 3) {
+    const allFilled = Object.values(formData.spending).some((val) => val > 0);
+    if (!allFilled) {
+      Alert.alert("Required", "Please fill in at least one spending field.");
+      return false;
+    }
+  }
+
+  if (step === 4) {
+    if (!formData.goals) {
+      Alert.alert("Required", "Please select a financial goal.");
+      return false;
+    }
+    if (formData.priorities.length === 0) {
+      Alert.alert("Required", "Please select at least one priority.");
+      return false;
+    }
+  }
+
+  return true;
+};
+
+  const handleNext = () => {
+ if (!validateStep()) return;
+
+  if (step === 4) {
+    // Last step → navigate
+    Alert.alert("Success", "Your budget has been created!");
+    router.replace("/(tabs)"); // navigate to the correct page
+  } else {
+    // Not the last step → go to next
+    nextStep();
+  }
+  };
+
 
   const StyledButton: React.FC<StyledButtonProps> = ({
     title,
@@ -100,41 +153,31 @@ export default function MultiStepForm() {
   );
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.scroll}>
+        <ImageBackground
+          source={require('../assets/images/hero.jpg')}
+          style={{ width: '100%', height: '100%', paddingTop: 80, paddingHorizontal: 30 }}
+          >
+             {step > 1 && (
+                    <TouchableOpacity
+                      style={styles.backButton}
+                      onPress={prevStep}
+                    >
+                      <Text style={{position: 'absolute', left: 20, top: 1, color: '#90a3ecff', fontSize: 30}}>{'<'}</Text>
+                    </TouchableOpacity>
+             )}
       <View style={styles.heroWrap}>
         <Text style={styles.title}>Creating Your Budget</Text>
         <Text style={styles.subtitle}>Step {step} of 4</Text>
       </View>
 
-      <View style={styles.card}>
+      <View style={styles.card}
+       onLayout={(event) => {
+    const { width } = event.nativeEvent.layout;
+    setCardWidth(width); // store it in state
+  }}>
         {step === 1 && (
           <>
             {/* Name */}
-            <View style={styles.inputWrap}>
-              <TextInput
-                style={styles.input}
-                placeholder="Name Surname"
-                placeholderTextColor="#94a3b8"
-                value={formData.name}
-                onChangeText={(text) =>
-                  setFormData({ ...formData, name: text })
-                }
-              />
-            </View>
-
-            {/* Phone */}
-            <View style={styles.inputWrap}>
-              <TextInput
-                style={styles.input}
-                placeholder="Phone number"
-                placeholderTextColor="#94a3b8"
-                keyboardType="phone-pad"
-                value={formData.phone}
-                onChangeText={(text) =>
-                  setFormData({ ...formData, phone: text })
-                }
-              />
-            </View>
 
             {/* Finances */}
             <View style={styles.inputWrap}>
@@ -165,7 +208,7 @@ export default function MultiStepForm() {
                 selectedStyle={{ backgroundColor: "#4b56f3ff" }}
                 unselectedStyle={{ backgroundColor: "#e9eaffff" }}
                 containerStyle={{ marginVertical: 20 }}
-                sliderLength={380}
+                sliderLength={cardWidth - 80}
                 trackStyle={{ height: 12, borderRadius: 6 }} // ↑ taller track
                 markerStyle={{
                   height: 20,
@@ -177,7 +220,7 @@ export default function MultiStepForm() {
               />
             </View>
 
-            <StyledButton title="Next" onPress={nextStep} />
+            <StyledButton title="Next" onPress={handleNext} />
           </>
         )}
 
@@ -210,8 +253,7 @@ export default function MultiStepForm() {
               />
             ))}
 
-            <StyledButton title="Next" onPress={nextStep} />
-            <StyledButton title="Back" variant="secondary" onPress={prevStep} />
+            <StyledButton title="Next" onPress={handleNext} />
           </>
         )}
 
@@ -243,8 +285,7 @@ export default function MultiStepForm() {
               </View>
             ))}
             {/* Navigation */}
-            <StyledButton title="Next" onPress={nextStep} />
-            <StyledButton title="Back" variant="ghost" onPress={prevStep} />
+            <StyledButton title="Next" onPress={handleNext} />
           </>
         )}
         {step === 4 && (
@@ -277,7 +318,6 @@ export default function MultiStepForm() {
                 </TouchableOpacity>
               ))}
             </View>
-            <Text style={styles.rangeText}>Current: {formData.goals}</Text>
 
             {/* Priorities Multi-choice */}
             <Text style={styles.subtitle}>Select Your Priorities</Text>
@@ -311,38 +351,16 @@ export default function MultiStepForm() {
             )}
 
             {/* Navigation */}
-            <StyledButton title="Next" onPress={nextStep} />
-            <StyledButton title="Back" variant="ghost" onPress={prevStep} />
-          </>
-        )}
-        {/* <Text style={styles.confirmBox}>
-                {JSON.stringify(formData, null, 2)}
-                </Text> */}
-        {step === 5 && (
-          <>
-            <StyledButton
-              title="Confirm"
-              variant="primary"
-              onPress={() => alert("Submitted")}
-            />
-            <StyledButton title="Back" variant="ghost" onPress={prevStep} />
+            <StyledButton title="Confirm" variant="primary" onPress={handleNext} />
           </>
         )}
       </View>
-    </ScrollView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#ffffff", // pure white background
-  },
-  scroll: {
-    paddingTop: 80,
-    paddingBottom: 120,
-    paddingHorizontal: 20,
-  },
+
   container: {
     padding: 20,
     backgroundColor: "#ffffff", // white card look
@@ -362,18 +380,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 12,
   },
-  sliderLabel: {
-    fontSize: 14,
-    color: "#374151", // softer gray for subtext
-    textAlign: "center",
-    marginTop: 10,
-  },
   heroWrap: {
+    marginTop: 40,
     alignItems: "center",
-    marginBottom: 20,
   },
   title: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: "800",
     color: "#111827", // bold dark title
     textAlign: "center",
@@ -387,6 +399,7 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 20,
     padding: 20,
+    marginTop: 50,
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.08)",
     backgroundColor: "#ffffff",
@@ -455,42 +468,52 @@ const styles = StyleSheet.create({
   btnGhostText: {
     color: "#6366f1",
   },
-  confirmBox: {
-    color: "#111827",
-    fontSize: 14,
-    marginBottom: 10,
-    backgroundColor: "#f3f4f6", // subtle light gray for contrast
+    backButton: {
+    position: "absolute",
+    top: 20, // adjust for safe area / status bar
+    left: 15,
+    backgroundColor: "rgba(255, 255, 255, 0)", // subtle transparent background,
     padding: 10,
-    borderRadius: 10,
   },
-  // Goals
-  goalButtonsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginVertical: 10,
-  },
-  goalButton: {
-    flex: 1,
-    padding: 12,
-    marginHorizontal: 5,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    alignItems: "center",
-    backgroundColor: "#fff",
-  },
-  goalButtonSelected: {
-    backgroundColor: "#4f46e5",
-    borderColor: "#4f46e5",
-  },
-  goalButtonText: { color: "#000", fontWeight: "600" },
-  goalButtonTextSelected: { color: "#fff" },
+goalButtonsContainer: {
+  flexDirection: "row",
+  marginBottom: 20,
+  backgroundColor: "#E5E7EB", // light grey (Tailwind gray-200)
+  borderRadius: 12, // fully rounded
+  padding: 4,
+},
+
+goalButton: {
+  flex: 1, // makes each option equal width
+  alignItems: "center",
+  justifyContent: "center",
+  paddingVertical: 8,
+  borderRadius: 9,
+},
+
+goalButtonSelected: {
+  backgroundColor: "#fff", // white highlight
+  shadowColor: "#000",
+  shadowOpacity: 0.05,
+  shadowOffset: { width: 0, height: 1 },
+  shadowRadius: 2,
+  elevation: 1,
+},
+goalButtonText: {
+  fontSize: 14,
+  fontWeight: "600",
+  color: "#374151", // gray-700
+},
+
+goalButtonTextSelected: {
+  color: "#111827", // gray-900 for stronger contrast
+},
 
   // Priorities
   rangeText: { textAlign: "center", marginVertical: 5, fontSize: 16 },
   optionButton: {
-    padding: 10,
-    borderRadius: 20,
+    paddingVertical: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#ccc",
     marginVertical: 5,
