@@ -10,7 +10,9 @@ import {
   ScrollView,
   Image,
   Platform,
+  ImageBackground,
 } from "react-native";
+
 import { supabase } from "../../api";
 import * as WebBrowser from "expo-web-browser";
 import * as Google from "expo-auth-session/providers/google";
@@ -19,7 +21,7 @@ import { useAuth } from "@/store/auth";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
-import Animated, { FadeInUp, FadeInDown } from "react-native-reanimated";
+import Animated, { FadeInUp, FadeInDown, FadeOutDown } from "react-native-reanimated";
 
 // Types
 
@@ -202,17 +204,25 @@ export default function AuthScreen(): React.ReactElement {
   };
 
   return (
-    <LinearGradient
-      colors={["#0f172a", "#111827", "#0b1220"]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.screen}
-    >
+    <ImageBackground
+      source={require('../../assets/images/hero.jpg')}
+      style={{ width: '100%', height: '100%' }}
+      >
+
       <ScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
-        <Animated.View entering={FadeInDown.duration(500)}>
+        {screen != "welcome" && (
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => setScreen("welcome")}
+        >
+          <Text style={{position: 'absolute', left: 20, top: 1, color: '#90a3ecff', fontSize: 30}}>{'<'}</Text>
+        </TouchableOpacity>
+      )}
+
+        <Animated.View entering={FadeInUp.duration(500)}>
           {/* Brand / Hero */}
           <View style={styles.heroWrap}>
             <LinearGradient
@@ -221,7 +231,7 @@ export default function AuthScreen(): React.ReactElement {
               end={{ x: 1, y: 1 }}
               style={styles.heroBadge}
             >
-              <Ionicons name="shield-checkmark" size={18} color="#0b1020" />
+              <Ionicons name="shield-checkmark" size={18} color="#f0f3ffff" />
               <Text style={styles.heroBadgeText}>Secure & Private</Text>
             </LinearGradient>
 
@@ -231,101 +241,34 @@ export default function AuthScreen(): React.ReactElement {
         </Animated.View>
 
         {/* Card */}
-        <Animated.View
-          entering={FadeInUp.delay(150).duration(500)}
-          style={styles.cardWrap}
-        >
-          <BlurView
-            intensity={Platform.OS === "ios" ? 40 : 20}
-            tint="dark"
-            style={styles.card}
-          >
-            {/* Segmented control */}
-            <View style={styles.segmentWrap}>
-              {(["welcome", "login", "register"] as Screen[]).map((s) => (
-                <TouchableOpacity
-                  key={s}
-                  onPress={() => setScreen(s)}
-                  style={[styles.segment, screen === s && styles.segmentActive]}
-                >
-                  <Text
-                    style={[
-                      styles.segmentText,
-                      screen === s && styles.segmentTextActive,
-                    ]}
-                  >
-                    {s === "welcome"
-                      ? "Start"
-                      : s.charAt(0).toUpperCase() + s.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+
+
+          {screen === "welcome" && (
+              <Animated.View
+                entering={FadeInUp.duration(400)}
+                exiting={FadeOutDown.duration(300)}
+              >
+            <View style={styles.container}>
+              <TouchableOpacity
+                style={[styles.btn, styles.btnPrimary]}
+                onPress={() => setScreen("register")}
+              >
+                <Text style={styles.btnText}>Get Started</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={() => setScreen("login")}>
+                <Text style={styles.smallText}>Have an account? Login</Text>
+              </TouchableOpacity>
             </View>
-
-            {/* Welcome */}
-            {screen === "welcome" && (
-              <View>
-                {!userInfo && (
-                  <View>
-                    <TouchableOpacity
-                      style={[styles.btn, styles.btnPrimary]}
-                      onPress={() => setScreen("register")}
-                    >
-                      <Ionicons name="person-add" size={18} color="#fff" />
-                      <Text style={styles.btnText}>Create account</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[styles.btn, styles.btnIndigo]}
-                      onPress={() => setScreen("login")}
-                    >
-                      <Ionicons name="log-in" size={18} color="#fff" />
-                      <Text style={styles.btnText}>Login</Text>
-                    </TouchableOpacity>
-
-                    <View style={styles.dividerRow}>
-                      <View style={styles.divider} />
-                      <Text style={styles.dividerText}>or</Text>
-                      <View style={styles.divider} />
-                    </View>
-
-                    <TouchableOpacity
-                      style={[styles.btn, styles.btnGoogle]}
-                      disabled={!request}
-                      onPress={onGooglePress}
-                    >
-                      <Ionicons name="logo-google" size={18} color="#111827" />
-                      <Text style={[styles.btnText, styles.btnTextDark]}>
-                        Sign in with Google
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {userInfo && (
-                  <View style={styles.profileCard}>
-                    {userInfo?.picture && (
-                      <Image
-                        source={{ uri: userInfo.picture }}
-                        style={styles.avatar}
-                      />
-                    )}
-                    <Text style={styles.profileText}>
-                      Email: {userInfo.email}
-                    </Text>
-                    <Text style={styles.profileText}>
-                      Verified: {userInfo.verified_email ? "yes" : "no"}
-                    </Text>
-                    <Text style={styles.profileText}>
-                      Name: {userInfo.name}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
+            </Animated.View>
+          )}
 
             {/* Register */}
             {screen === "register" && (
+              <Animated.View
+                entering={FadeInUp.duration(400).delay(100)}
+                exiting={FadeOutDown.duration(300)}
+              >
               <View>
                 <Input
                   icon="person-circle-outline"
@@ -381,20 +324,17 @@ export default function AuthScreen(): React.ReactElement {
                     </>
                   )}
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.btn, styles.btnGhost]}
-                  onPress={() => setScreen("welcome")}
-                >
-                  <Ionicons name="arrow-back" size={18} color="#c7d2fe" />
-                  <Text style={[styles.btnText, styles.btnGhostText]}>
-                    Back
-                  </Text>
-                </TouchableOpacity>
+
               </View>
+              </Animated.View>
             )}
 
             {/* Login */}
             {screen === "login" && (
+                <Animated.View
+                entering={FadeInUp.duration(400).delay(100)}
+                exiting={FadeOutDown.duration(300)}
+                > 
               <View>
                 <Input
                   icon="mail-outline"
@@ -430,15 +370,7 @@ export default function AuthScreen(): React.ReactElement {
                     </>
                   )}
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.btn, styles.btnGhost]}
-                  onPress={() => setScreen("welcome")}
-                >
-                  <Ionicons name="arrow-back" size={18} color="#c7d2fe" />
-                  <Text style={[styles.btnText, styles.btnGhostText]}>
-                    Back
-                  </Text>
-                </TouchableOpacity>
+
 
                 <View style={styles.dividerRow}>
                   <View style={styles.divider} />
@@ -455,10 +387,10 @@ export default function AuthScreen(): React.ReactElement {
                     Sign in with Google
                   </Text>
                 </TouchableOpacity>
+
               </View>
+              </Animated.View>
             )}
-          </BlurView>
-        </Animated.View>
       </ScrollView>
 
       {isLoading && (
@@ -469,15 +401,16 @@ export default function AuthScreen(): React.ReactElement {
       )}
 
       {/* Decorative Gradients */}
-      <LinearGradient
+      {/* <LinearGradient
         colors={["rgba(99,102,241,0.25)", "transparent"]}
         style={[styles.glow, { top: -40, left: -80 }]}
       />
       <LinearGradient
         colors={["rgba(16,185,129,0.25)", "transparent"]}
         style={[styles.glow, { bottom: -60, right: -60 }]}
-      />
-    </LinearGradient>
+      /> */}
+    </ImageBackground>
+    
   );
 }
 
@@ -545,91 +478,70 @@ function Input(props: InputProps) {
 
 const styles = StyleSheet.create({
   screen: {
-    flex: 1,
+    width: "100%",
+    backgroundColor: "#f8fafc", // clean white background with slight gray tint
   },
   scroll: {
+    width: "100%",
     paddingTop: 80,
-    paddingBottom: 120,
+    paddingBottom: 40,
     paddingHorizontal: 20,
   },
   heroWrap: {
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 30,
+    paddingTop:100,
   },
   heroBadge: {
     flexDirection: "row",
     gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: "transparent",
+    backgroundColor: "rgba(59,130,246,0.1)", // light blue badge background
     alignItems: "center",
-    marginBottom: 14,
+    marginBottom: 16,
   },
   heroBadgeText: {
-    color: "#0b1020",
+    color: "#2563eb", // primary blue text
     fontWeight: "600",
   },
   title: {
-    fontSize: 28,
+    fontSize: 40,
     fontWeight: "800",
-    color: "#e5e7eb",
+    color: "#0f172a", // dark navy text
     textAlign: "center",
   },
-  subtitle: {
-    fontSize: 15,
-    color: "#a3a3a3",
+subtitle: {
+    fontSize: 17,
+    color: "#475569", // slate gray
     textAlign: "center",
     marginTop: 6,
   },
   cardWrap: {
     marginTop: 20,
   },
-  card: {
-    borderRadius: 20,
-    padding: 20,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.2)",
-    backgroundColor: "rgba(17,24,39,0.5)",
-  },
-  segmentWrap: {
-    flexDirection: "row",
-    backgroundColor: "rgba(148,163,184,0.12)",
-    padding: 6,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  segment: {
+  container: {
     flex: 1,
-    paddingVertical: 10,
+    justifyContent: "flex-end", // push content to bottom
     alignItems: "center",
-    borderRadius: 10,
+    paddingTop: 430, // some space from top edge
   },
-  segmentActive: {
-    backgroundColor: "#111827",
-  },
-  segmentText: {
-    color: "#cbd5e1",
-    fontWeight: "600",
-  },
-  segmentTextActive: {
-    color: "#e5e7eb",
-  },
+
   inputWrap: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(2,6,23,0.6)",
+    backgroundColor: "#f1f5f9", // light gray input bg
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.25)",
+    borderColor: "rgba(59,130,246,0.25)",
     paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 12,
-    height: 50,
+    borderRadius: 14,
+    marginBottom: 14,
+    height: 52,
   },
   input: {
     flex: 1,
-    color: "#e5e7eb",
+    color: "#0f172a",
     fontSize: 16,
   },
   btn: {
@@ -637,93 +549,85 @@ const styles = StyleSheet.create({
     gap: 8,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 10,
+    paddingVertical: 16,
+    borderRadius: 14,
+    width: "95%",
+    marginTop: 12,
   },
-  btnPrimary: {
-    backgroundColor: "#10b981",
-    shadowColor: "#10b981",
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
+   btnPrimary: {
+    backgroundColor: "#3b6df6ff", // main blue
+    shadowColor: "#3b82f6",
+    shadowOpacity: 0.4,
+    shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
+  },
+  backButton: {
+    position: "absolute",
+    top: 50, // adjust for safe area / status bar
+    left: 20,
+    backgroundColor: "rgba(255, 255, 255, 0)", // subtle transparent background,
+    padding: 10,
   },
   btnIndigo: {
-    backgroundColor: "#6366f1",
-    shadowColor: "#6366f1",
+    backgroundColor: "#2563eb", // deeper blue
+    shadowColor: "#2563eb",
     shadowOpacity: 0.35,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 5,
   },
   btnGoogle: {
     backgroundColor: "#ffffff",
   },
-  btnGhost: {
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "#4f46e5",
-  },
+
   btnText: {
     color: "#fff",
     fontSize: 16,
+    width: 200,
+    textAlign: "center",
     fontWeight: "700",
   },
   btnTextDark: {
-    color: "#111827",
+    color: "#1e293b", // dark slate
   },
-  btnGhostText: {
-    color: "#c7d2fe",
-  },
+
   dividerRow: {
     flexDirection: "row",
     alignItems: "center",
     marginVertical: 12,
     gap: 8,
   },
-  divider: {
+ divider: {
     flex: 1,
     height: 1,
-    backgroundColor: "rgba(148,163,184,0.25)",
+    backgroundColor: "#e2e8f0", // light gray divider
   },
   dividerText: {
-    color: "#94a3b8",
-    fontSize: 12,
+    color: "#ffffffff",
+    fontSize: 14,
   },
-  profileCard: {
-    alignItems: "center",
-    padding: 12,
-    gap: 6,
-  },
-  avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    marginBottom: 6,
-  },
-  profileText: {
-    color: "#e5e7eb",
-  },
-  loadingOverlay: {
+  
+
+
+loadingOverlay: {
     position: "absolute",
     left: 0,
     right: 0,
     top: 0,
     bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.35)",
+    backgroundColor: "rgba(255,255,255,0.6)", // light overlay
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
   },
   loadingText: {
-    color: "#cbd5e1",
+    color: "#bfdbfe", // pale blue
   },
-  glow: {
-    position: "absolute",
-    width: 280,
-    height: 280,
-    borderRadius: 280,
-    filter: Platform.OS === "web" ? "blur(80px)" : (undefined as any),
+    smallText: {
+      paddingTop: 10,
+    fontSize: 15,
+    color: "#dae2f0ff", // gray-600
+    textAlign: "center",
   },
 });
