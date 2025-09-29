@@ -1,64 +1,57 @@
-import React, { useState, ReactNode } from "react";
+import React, { useMemo, useState, ReactNode } from "react";
 import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
   StyleSheet,
-  ScrollView,
   ImageBackground,
+  Pressable,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Alert,
 } from "react-native";
 import MultiSlider from "@ptomasroos/react-native-multi-slider";
 import { Ionicons } from "@expo/vector-icons";
-import { Alert } from "react-native";
 import { router } from "expo-router";
-type Spending = {
-  rent: number;
-  utilities: number;
-  transportation: number;
-  other: number;
-};
-type Income = {
-  from: number;
-  to: number;
-};
 
+type Spending = { rent: number; utilities: number; transportation: number; other: number };
+type Income = { from: number; to: number };
 type FormData = {
   finances: string;
   income: Income;
   lifeSituation: string;
   spending: Spending;
-  goals: string;
+  goals: "Saving" | "Mid" | "Spending";
   priorities: string[];
 };
 
 type ButtonVariant = "primary" | "secondary" | "ghost";
-
 type StyledButtonProps = {
   title: string;
   onPress: () => void;
   variant?: ButtonVariant;
   icon?: ReactNode;
+  testID?: string;
+  disabled?: boolean;
 };
 
 export default function MultiStepForm() {
   const [step, setStep] = useState<number>(1);
+  const [cardWidth, setCardWidth] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+
   const [formData, setFormData] = useState<FormData>({
     finances: "",
-    income: {
-      from: 1000,
-      to: 2000,
-    },
+    income: { from: 1000, to: 2000 },
     lifeSituation: "",
-    spending: {
-      rent: 0,
-      utilities: 0,
-      transportation: 0,
-      other: 0,
-    },
+    spending: { rent: 0, utilities: 0, transportation: 0, other: 0 },
     goals: "Saving",
     priorities: [],
   });
+
+  // inline error messages per step
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const spendingOptions: { key: keyof Spending; label: string }[] = [
     { key: "rent", label: "Rent" },
@@ -66,336 +59,347 @@ export default function MultiStepForm() {
     { key: "transportation", label: "Transportation" },
     { key: "other", label: "Other bills" },
   ];
-  const [cardWidth, setCardWidth] = useState(0);
+
   const handleIncomeChange = (values: number[]) => {
-    // values[0] = from, values[1] = to
-    setFormData({ ...formData, income: { from: values[0], to: values[1] } });
-  };
-  const nextStep = () => setStep((prev) => prev + 1);
-  const prevStep = () => setStep((prev) => prev - 1);
-
-
-const validateStep = () => {
-  if (step === 1) {
-    if (!formData.finances.trim()) {
-      Alert.alert("Required", "Please enter your finances.");
-      return false;
-    }
-    if (formData.income.from <= 0 && formData.income.to <= 0) {
-      Alert.alert("Required", "Please select your income range.");
-      return false;
-    }
-  }
-
-  if (step === 2) {
-    if (!formData.lifeSituation) {
-      Alert.alert("Required", "Please select your life situation.");
-      return false;
-    }
-  }
-
-  if (step === 3) {
-    const allFilled = Object.values(formData.spending).some((val) => val > 0);
-    if (!allFilled) {
-      Alert.alert("Required", "Please fill in at least one spending field.");
-      return false;
-    }
-  }
-
-  if (step === 4) {
-    if (!formData.goals) {
-      Alert.alert("Required", "Please select a financial goal.");
-      return false;
-    }
-    if (formData.priorities.length === 0) {
-      Alert.alert("Required", "Please select at least one priority.");
-      return false;
-    }
-  }
-
-  return true;
-};
-
-  const handleNext = () => {
- if (!validateStep()) return;
-
-  if (step === 4) {
-    // Last step → navigate
-    Alert.alert("Success", "Your budget has been created!");
-    router.replace("/(tabs)"); // navigate to the correct page
-  } else {
-    // Not the last step → go to next
-    nextStep();
-  }
+    setFormData((prev) => ({ ...prev, income: { from: values[0], to: values[1] } }));
   };
 
+  const nextStep = () => setStep((p) => Math.min(4, p + 1));
+  const prevStep = () => setStep((p) => Math.max(1, p - 1));
+
+  // ------- validation that returns error messages (no alerts) -------
+  const getStepErrors = (s: number, data: FormData) => {
+    const e: Record<string, string> = {};
+    if (s === 1) {
+      if (!data.finances.trim()) e.finances = "Please enter your finances.";
+      const { from, to } = data.income;
+      if (from <= 0 || to <= 0 || from >= to) e.income = "Please select a valid income range.";
+    }
+    if (s === 2) {
+      if (!data.lifeSituation) e.lifeSituation = "Please select your life situation.";
+    }
+    if (s === 3) {
+      const anyFilled = Object.values(data.spending).some((v) => Number(v) > 0);
+      if (!anyFilled) e.spending = "Please fill in at least one spending field.";
+    }
+    if (s === 4) {
+      if (!data.goals) e.goals = "Please select a financial goal.";
+      if (data.priorities.length === 0) e.priorities = "Please select at least one priority.";
+    }
+    return e;
+  };
+
+  const stepErrors = useMemo(() => getStepErrors(step, formData), [step, formData]);
+
+  const handleNext = async () => {
+    if (submitting) return;
+    const currentErrors = getStepErrors(step, formData);
+    if (Object.keys(currentErrors).length) {
+      setErrors(currentErrors); // show errors inline
+      return;
+    }
+    setErrors({});
+    setSubmitting(true);
+    try {
+      if (step === 4) {
+        Alert.alert("Success", "Your budget has been created!");
+        router.replace("/(tabs)");
+        return;
+      }
+      nextStep();
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const StyledButton: React.FC<StyledButtonProps> = ({
     title,
     onPress,
     variant = "primary",
+    icon,
+    testID,
+    disabled,
   }) => (
-    <TouchableOpacity
-      style={[
+    <Pressable
+      testID={testID}
+      onPress={disabled ? undefined : onPress}
+      onPressIn={() => !disabled && console.log(`[BUTTON] onPressIn: ${title}`)}
+      onPressOut={() => !disabled && console.log(`[BUTTON] onPressOut: ${title}`)}
+      hitSlop={10}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled }}
+      style={({ pressed }) => [
         styles.btn,
         variant === "primary" && styles.btnPrimary,
         variant === "secondary" && styles.btnIndigo,
         variant === "ghost" && styles.btnGhost,
+        disabled && { opacity: 0.55 },
+        pressed && !disabled && { opacity: 0.85 },
       ]}
-      onPress={onPress}
     >
-      <Text
-        style={[styles.btnText, variant === "ghost" && styles.btnGhostText]}
-      >
-        {title}
-      </Text>
-    </TouchableOpacity>
+      {icon ? <View style={{ marginRight: 8 }}>{icon}</View> : null}
+      <Text style={[styles.btnText, variant === "ghost" && styles.btnGhostText]}>{title}</Text>
+    </Pressable>
   );
 
   return (
-        <ImageBackground
-          source={require('../assets/images/hero.jpg')}
-          style={{ width: '100%', height: '100%', paddingTop: 80, paddingHorizontal: 30 }}
-          >
-             {step > 1 && (
-                    <TouchableOpacity
-                      style={styles.backButton}
-                      onPress={prevStep}
-                    >
-                      <Text style={{position: 'absolute', left: 20, top: 1, color: '#90a3ecff', fontSize: 30}}>{'<'}</Text>
-                    </TouchableOpacity>
-             )}
-      <View style={styles.heroWrap}>
-        <Text style={styles.title}>Creating Your Budget</Text>
-        <Text style={styles.subtitle}>Step {step} of 4</Text>
-      </View>
-
-      <View style={styles.card}
-       onLayout={(event) => {
-    const { width } = event.nativeEvent.layout;
-    setCardWidth(width); // store it in state
-  }}>
-        {step === 1 && (
-          <>
-            {/* Name */}
-
-            {/* Finances */}
-            <View style={styles.inputWrap}>
-              <TextInput
-                style={styles.input}
-                placeholder="Finances"
-                placeholderTextColor="#1f1f1fff"
-                value={formData.finances}
-                onChangeText={(text) =>
-                  setFormData({ ...formData, finances: text })
-                }
-              />
-            </View>
-
-            {/* Income Slider */}
-            <View style={styles.container}>
-              <Text style={styles.label}>
-                Income range: ${formData.income.from.toLocaleString()} - $
-                {formData.income.to.toLocaleString()}
-              </Text>
-
-              <MultiSlider
-                values={[formData.income.from, formData.income.to]}
-                min={0}
-                max={10000}
-                step={100}
-                onValuesChange={handleIncomeChange}
-                selectedStyle={{ backgroundColor: "#4b56f3ff" }}
-                unselectedStyle={{ backgroundColor: "#e9eaffff" }}
-                containerStyle={{ marginVertical: 20 }}
-                sliderLength={cardWidth - 80}
-                trackStyle={{ height: 12, borderRadius: 6 }} // ↑ taller track
-                markerStyle={{
-                  height: 20,
-                  width: 20,
-                  borderRadius: 15,
-                  backgroundColor: "#4b56f3ff",
-                  top: 6,
-                }}
-              />
-            </View>
-
-            <StyledButton title="Next" onPress={handleNext} />
-          </>
-        )}
-
-        {step === 2 && (
-          <>
-            <Text style={styles.subtitle}>Life Situation</Text>
-
-            {[
-              { label: "Student", icon: "school-outline" },
-              { label: "Employed", icon: "briefcase-outline" },
-              { label: "Self-Employed", icon: "business-outline" },
-              { label: "Unemployed", icon: "close-circle-outline" },
-              { label: "Retired", icon: "walk-outline" },
-              { label: "Other", icon: "help-circle-outline" },
-            ].map((option) => (
-              <StyledButton
-                key={option.label}
-                title={option.label}
-                variant={
-                  formData.lifeSituation === option.label
-                    ? "secondary"
-                    : "ghost"
-                }
-                icon={
-                  <Ionicons name={option.icon as any} size={20} color="black" />
-                }
-                onPress={() =>
-                  setFormData({ ...formData, lifeSituation: option.label })
-                }
-              />
-            ))}
-
-            <StyledButton title="Next" onPress={handleNext} />
-          </>
-        )}
-
-        {step === 3 && (
-          <>
-            <Text style={styles.subtitle}>Monthly Spending</Text>
-            {spendingOptions.map((option) => (
-              <View style={styles.inputWrap} key={option.key}>
-                <TextInput
-                  style={styles.input}
-                  placeholder={option.label}
-                  placeholderTextColor="#94a3b8"
-                  keyboardType="numeric"
-                  value={
-                    formData.spending[option.key] === 0
-                      ? "" // show empty input for 0
-                      : formData.spending[option.key].toString()
-                  }
-                  onChangeText={(val) =>
-                    setFormData({
-                      ...formData,
-                      spending: {
-                        ...formData.spending,
-                        [option.key]: Number(val) || 0, // dynamically update correct field
-                      },
-                    })
-                  }
-                />
-              </View>
-            ))}
-            {/* Navigation */}
-            <StyledButton title="Next" onPress={handleNext} />
-          </>
-        )}
-        {step === 4 && (
-          <>
-            <Text style={styles.subtitle}>Set Your Financial Goals</Text>
-
-            {/* Goals Slider */}
-            <Text style={styles.label}>Goal allocation</Text>
-            <View style={styles.goalButtonsContainer}>
-              {["Saving", "Mid", "Spending"].map((goalOption) => (
-                <TouchableOpacity
-                  key={goalOption}
-                  style={[
-                    styles.goalButton,
-                    formData.goals === goalOption && styles.goalButtonSelected,
-                  ]}
-                  onPress={() =>
-                    setFormData({ ...formData, goals: goalOption })
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.goalButtonText,
-                      formData.goals === goalOption &&
-                        styles.goalButtonTextSelected,
-                    ]}
-                  >
-                    {goalOption}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Priorities Multi-choice */}
-            <Text style={styles.subtitle}>Select Your Priorities</Text>
-            {["Entertainment", "Clothes", "Food", "Travelling", "Others"].map(
-              (option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={[
-                    styles.optionButton,
-                    formData.priorities.includes(option) &&
-                      styles.optionSelected,
-                  ]}
-                  onPress={() => {
-                    const newPriorities = formData.priorities.includes(option)
-                      ? formData.priorities.filter((p) => p !== option)
-                      : [...formData.priorities, option];
-                    setFormData({ ...formData, priorities: newPriorities });
+    <ImageBackground
+      source={require("../assets/images/hero.jpg")}
+      style={{ width: "100%", height: "100%", paddingTop: 80, paddingHorizontal: 30 }}
+      resizeMode="cover"
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.select({ ios: "padding", android: undefined })}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 40 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={{ flex: 1 }} pointerEvents="box-none">
+            {step > 1 && (
+              <Pressable
+                style={styles.backButton}
+                onPress={prevStep}
+                hitSlop={12}
+                pointerEvents="auto"
+              >
+                <Text
+                  style={{
+                    position: "absolute",
+                    left: 20,
+                    top: 1,
+                    color: "#90a3ecff",
+                    fontSize: 30,
                   }}
                 >
-                  <Text
-                    style={[
-                      styles.optionText,
-                      formData.priorities.includes(option) &&
-                        styles.optionTextSelected,
-                    ]}
-                  >
-                    {option}
-                  </Text>
-                </TouchableOpacity>
-              ),
+                  {"<"}
+                </Text>
+              </Pressable>
             )}
 
-            {/* Navigation */}
-            <StyledButton title="Confirm" variant="primary" onPress={handleNext} />
-          </>
-        )}
-      </View>
+            <View style={styles.heroWrap} pointerEvents="box-none">
+              <Text style={styles.title}>Creating Your Budget</Text>
+              <Text style={styles.subtitle}>Step {step} of 4</Text>
+            </View>
+
+            <View
+              style={styles.card}
+              pointerEvents="auto"
+              onLayout={(e) => setCardWidth(e.nativeEvent.layout.width)}
+            >
+              {/* STEP 1 */}
+              {step === 1 && (
+                <>
+                  <View style={styles.inputWrap}>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Finances"
+                      placeholderTextColor="#1f1f1fff"
+                      value={formData.finances}
+                      onChangeText={(text) => setFormData({ ...formData, finances: text })}
+                      returnKeyType="done"
+                    />
+                  </View>
+                  {errors.finances || stepErrors.finances ? (
+                    <Text style={styles.errText}>{errors.finances || stepErrors.finances}</Text>
+                  ) : null}
+
+                  <View style={styles.container}>
+                    <Text style={styles.label}>
+                      Income range: ${formData.income.from.toLocaleString()} - $
+                      {formData.income.to.toLocaleString()}
+                    </Text>
+
+                    <MultiSlider
+                      values={[formData.income.from, formData.income.to]}
+                      min={0}
+                      max={10000}
+                      step={100}
+                      onValuesChange={handleIncomeChange}
+                      selectedStyle={{ backgroundColor: "#4b56f3ff" }}
+                      unselectedStyle={{ backgroundColor: "#e9eaffff" }}
+                      containerStyle={{ marginVertical: 20 }}
+                      sliderLength={Math.max(cardWidth - 80, 160)}
+                      trackStyle={{ height: 12, borderRadius: 6 }}
+                      markerStyle={{
+                        height: 20,
+                        width: 20,
+                        borderRadius: 15,
+                        backgroundColor: "#4b56f3ff",
+                        top: 6,
+                      }}
+                    />
+                  </View>
+                  {errors.income || stepErrors.income ? (
+                    <Text style={[styles.errText, { marginTop: 6 }]}>
+                      {errors.income || stepErrors.income}
+                    </Text>
+                  ) : null}
+
+                  <StyledButton testID="next-1" title="Next" onPress={handleNext} disabled={!!submitting} />
+                </>
+              )}
+
+              {/* STEP 2 */}
+              {step === 2 && (
+                <>
+                  <Text style={styles.subtitle}>Life Situation</Text>
+                  {[
+                    { label: "Student", icon: "school-outline" },
+                    { label: "Employed", icon: "briefcase-outline" },
+                    { label: "Self-Employed", icon: "business-outline" },
+                    { label: "Unemployed", icon: "close-circle-outline" },
+                    { label: "Retired", icon: "walk-outline" },
+                    { label: "Other", icon: "help-circle-outline" },
+                  ].map((option) => (
+                    <StyledButton
+                      key={option.label}
+                      title={option.label}
+                      variant={formData.lifeSituation === option.label ? "secondary" : "ghost"}
+                      icon={<Ionicons name={option.icon as any} size={20} color="black" />}
+                      onPress={() => setFormData({ ...formData, lifeSituation: option.label })}
+                    />
+                  ))}
+                  {errors.lifeSituation || stepErrors.lifeSituation ? (
+                    <Text style={styles.errText}>
+                      {errors.lifeSituation || stepErrors.lifeSituation}
+                    </Text>
+                  ) : null}
+
+                  <StyledButton testID="next-2" title="Next" onPress={handleNext} disabled={!!submitting} />
+                </>
+              )}
+
+              {/* STEP 3 */}
+              {step === 3 && (
+                <>
+                  <Text style={styles.subtitle}>Monthly Spending</Text>
+                  {spendingOptions.map((option) => (
+                    <View style={styles.inputWrap} key={option.key}>
+                      <TextInput
+                        style={styles.input}
+                        placeholder={option.label}
+                        placeholderTextColor="#94a3b8"
+                        keyboardType="numeric"
+                        value={
+                          formData.spending[option.key] === 0
+                            ? ""
+                            : String(formData.spending[option.key])
+                        }
+                        onChangeText={(val) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            spending: {
+                              ...prev.spending,
+                              [option.key]: Number(val) || 0,
+                            },
+                          }))
+                        }
+                        returnKeyType="done"
+                      />
+                    </View>
+                  ))}
+                  {errors.spending || stepErrors.spending ? (
+                    <Text style={styles.errText}>{errors.spending || stepErrors.spending}</Text>
+                  ) : null}
+
+                  <StyledButton testID="next-3" title="Next" onPress={handleNext} disabled={!!submitting} />
+                </>
+              )}
+
+              {/* STEP 4 */}
+              {step === 4 && (
+                <>
+                  <Text style={styles.subtitle}>Set Your Financial Goals</Text>
+
+                  <Text style={styles.label}>Goal allocation</Text>
+                  <View style={styles.goalButtonsContainer}>
+                    {["Saving", "Mid", "Spending"].map((goalOption) => (
+                      <Pressable
+                        key={goalOption}
+                        style={[
+                          styles.goalButton,
+                          formData.goals === goalOption && styles.goalButtonSelected,
+                        ]}
+                        onPress={() => setFormData({ ...formData, goals: goalOption as any })}
+                        hitSlop={8}
+                      >
+                        <Text
+                          style={[
+                            styles.goalButtonText,
+                            formData.goals === goalOption && styles.goalButtonTextSelected,
+                          ]}
+                        >
+                          {goalOption}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  {errors.goals || stepErrors.goals ? (
+                    <Text style={styles.errText}>{errors.goals || stepErrors.goals}</Text>
+                  ) : null}
+
+                  <Text style={styles.subtitle}>Select Your Priorities</Text>
+                  {["Entertainment", "Clothes", "Food", "Travelling", "Others"].map((option) => {
+                    const selected = formData.priorities.includes(option);
+                    return (
+                      <Pressable
+                        key={option}
+                        style={[styles.optionButton, selected && styles.optionSelected]}
+                        onPress={() => {
+                          const newPriorities = selected
+                            ? formData.priorities.filter((p) => p !== option)
+                            : [...formData.priorities, option];
+                          setFormData({ ...formData, priorities: newPriorities });
+                        }}
+                        hitSlop={8}
+                      >
+                        <Text style={[styles.optionText, selected && styles.optionTextSelected]}>
+                          {option}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                  {errors.priorities || stepErrors.priorities ? (
+                    <Text style={styles.errText}>{errors.priorities || stepErrors.priorities}</Text>
+                  ) : null}
+
+                  <StyledButton
+                    testID="confirm"
+                    title="Confirm"
+                    variant="primary"
+                    onPress={handleNext}
+                    disabled={!!submitting}
+                  />
+                </>
+              )}
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-
   container: {
     padding: 20,
-    backgroundColor: "#ffffff", // white card look
+    backgroundColor: "#ffffff",
     borderRadius: 16,
     marginVertical: 10,
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.08)", // subtle border
+    borderColor: "rgba(0,0,0,0.08)",
     shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
-  label: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#111827", // dark text for contrast
-    textAlign: "center",
-    marginBottom: 12,
-  },
-  heroWrap: {
-    marginTop: 40,
-    alignItems: "center",
-  },
-  title: {
-    fontSize: 30,
-    fontWeight: "800",
-    color: "#111827", // bold dark title
-    textAlign: "center",
-  },
-  subtitle: {
-    fontSize: 15,
-    color: "#6b7280", // lighter gray for subtitle
-    marginTop: 5,
-    textAlign: "center",
-  },
+  label: { fontSize: 16, fontWeight: "600", color: "#111827", textAlign: "center", marginBottom: 12 },
+  heroWrap: { marginTop: 40, alignItems: "center" },
+  title: { fontSize: 30, fontWeight: "800", color: "#111827", textAlign: "center" },
+  subtitle: { fontSize: 15, color: "#6b7280", marginTop: 5, textAlign: "center" },
   card: {
     borderRadius: 20,
     padding: 20,
@@ -412,30 +416,26 @@ const styles = StyleSheet.create({
   inputWrap: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f9fafb", // light input background
+    backgroundColor: "#f9fafb",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.25)",
     paddingHorizontal: 12,
-    marginBottom: 12,
+    marginBottom: 8,
     height: 50,
     shadowColor: "#000",
     shadowOpacity: 0.03,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    color: "rgba(15, 14, 14, 1)",
-  },
+  input: { flex: 1, fontSize: 16, color: "rgba(15, 14, 14, 1)" },
   btn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 14,
     borderRadius: 12,
-    marginTop: 10,
+    marginTop: 12,
   },
   btnPrimary: {
     backgroundColor: "#4f46e5",
@@ -455,62 +455,22 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
     elevation: 5,
   },
-  btnText: {
-    color: "#ffffff",
-    fontWeight: "700",
-    fontSize: 16,
+  btnText: { color: "#ffffff", fontWeight: "700", fontSize: 16 },
+  btnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: "#6366f1" },
+  btnGhostText: { color: "#6366f1" },
+  backButton: { position: "absolute", top: 20, left: 15, backgroundColor: "transparent", padding: 10, zIndex: 5 },
+  goalButtonsContainer: { flexDirection: "row", marginBottom: 20, backgroundColor: "#E5E7EB", borderRadius: 12, padding: 4 },
+  goalButton: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 8, borderRadius: 9 },
+  goalButtonSelected: {
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 2,
+    elevation: 1,
   },
-  btnGhost: {
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "#6366f1",
-  },
-  btnGhostText: {
-    color: "#6366f1",
-  },
-    backButton: {
-    position: "absolute",
-    top: 20, // adjust for safe area / status bar
-    left: 15,
-    backgroundColor: "rgba(255, 255, 255, 0)", // subtle transparent background,
-    padding: 10,
-  },
-goalButtonsContainer: {
-  flexDirection: "row",
-  marginBottom: 20,
-  backgroundColor: "#E5E7EB", // light grey (Tailwind gray-200)
-  borderRadius: 12, // fully rounded
-  padding: 4,
-},
-
-goalButton: {
-  flex: 1, // makes each option equal width
-  alignItems: "center",
-  justifyContent: "center",
-  paddingVertical: 8,
-  borderRadius: 9,
-},
-
-goalButtonSelected: {
-  backgroundColor: "#fff", // white highlight
-  shadowColor: "#000",
-  shadowOpacity: 0.05,
-  shadowOffset: { width: 0, height: 1 },
-  shadowRadius: 2,
-  elevation: 1,
-},
-goalButtonText: {
-  fontSize: 14,
-  fontWeight: "600",
-  color: "#374151", // gray-700
-},
-
-goalButtonTextSelected: {
-  color: "#111827", // gray-900 for stronger contrast
-},
-
-  // Priorities
-  rangeText: { textAlign: "center", marginVertical: 5, fontSize: 16 },
+  goalButtonText: { fontSize: 14, fontWeight: "600", color: "#374151" },
+  goalButtonTextSelected: { color: "#111827" },
   optionButton: {
     paddingVertical: 14,
     borderRadius: 12,
@@ -522,4 +482,5 @@ goalButtonTextSelected: {
   optionSelected: { backgroundColor: "#4f46e5", borderColor: "#4f46e5" },
   optionText: { color: "#000" },
   optionTextSelected: { color: "#fff" },
+  errText: { color: "#ef4444", marginTop: 4, fontSize: 13 },
 });
