@@ -7,10 +7,10 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  ScrollView,
-  Image,
-  Platform,
   ImageBackground,
+  Platform,
+  KeyboardAvoidingView,
+  useWindowDimensions,
 } from "react-native";
 
 import { supabase } from "../../api";
@@ -21,8 +21,8 @@ import { useAuth } from "@/store/auth";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import Animated, { FadeInUp, FadeInDown, FadeOutDown } from "react-native-reanimated";
-// Types
 
+// Types
 type Screen = "welcome" | "register" | "login";
 WebBrowser.maybeCompleteAuthSession();
 
@@ -36,8 +36,12 @@ export default function AuthScreen(): React.ReactElement {
   const [surname, setSurname] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [secure, setSecure] = useState(true);
-
   const [userInfo, setUserInfo] = useState<any>(null);
+
+  // responsive scale: keeps layout inside viewport on small phones
+  const { height, width } = useWindowDimensions();
+  const hScale = Math.min(height / 800, 1); // caps at 1
+  const wScale = Math.max(Math.min(width / 390, 1), 0.85); // iPhone 14 width baseline
 
   const [request, response, promptAsync] = Google.useAuthRequest({
     androidClientId:
@@ -46,11 +50,9 @@ export default function AuthScreen(): React.ReactElement {
       "929357446480-fjouufrkndv6fbme5bir54c86q33o5pj.apps.googleusercontent.com",
     webClientId:
       "929357446480-gf7bks19r5o9nu4jau4s4p43vtohve6f.apps.googleusercontent.com",
-    // ask for profile + email in one go
     scopes: ["openid", "profile", "email"],
   });
 
-  // derive title per screen
   const title = useMemo(() => {
     if (screen === "register") return "Create account";
     if (screen === "login") return "Welcome back";
@@ -113,10 +115,7 @@ export default function AuthScreen(): React.ReactElement {
           name: userInfo.name,
         },
       ]);
-
-      if (insertError) {
-        console.error("Error saving user:", insertError);
-      }
+      if (insertError) console.error("Error saving user:", insertError);
     }
   }
 
@@ -146,13 +145,12 @@ export default function AuthScreen(): React.ReactElement {
             surname: surname.trim() || null,
           },
         ]);
-        if (profileError)
-          console.warn("Profile insert skipped:", profileError.message);
+        if (profileError) console.warn("Profile insert skipped:", profileError.message);
       }
 
       Alert.alert("Success", "Account created. Confirm via email.");
-      router.replace("/cont"); 
-   } catch (error: any) {
+      router.replace("/cont");
+    } catch (error: any) {
       Alert.alert("Registration Failed", error?.message ?? "Unknown error");
     } finally {
       setIsLoading(false);
@@ -181,16 +179,10 @@ export default function AuthScreen(): React.ReactElement {
       });
       setEmail("");
       setPassword("");
-      setIsLoading(false);
-      router.replace("/cont"); 
+      router.replace("/cont");
     } catch (error: any) {
       const msg = String(error?.message ?? "Login failed");
-      Alert.alert(
-        "Login Failed",
-        msg.includes("Invalid login credentials")
-          ? "Invalid email or password."
-          : msg,
-      );
+      Alert.alert("Login Failed", msg.includes("Invalid login credentials") ? "Invalid email or password." : msg);
     } finally {
       setIsLoading(false);
     }
@@ -201,206 +193,206 @@ export default function AuthScreen(): React.ReactElement {
     promptAsync();
   };
 
+  // derived style values (scale-aware)
+  const dyn = {
+    titleFs: Math.round(36 * wScale),
+    subFs: Math.round(16 * wScale),
+    inputH: Math.max(46, Math.round(52 * hScale)),
+    heroTopPad: Math.round(40 * hScale),
+    sectionGap: Math.round(12 * hScale),
+    blockPadV: Math.round(10 * hScale),
+  };
+
   return (
     <ImageBackground
-      source={require('../../assets/images/hero.jpg')}
-      style={{ width: '100%', height: '100%' }}
+      source={require("../../assets/images/hero.jpg")}
+      style={{ width: "100%", height: "100%" }}
+      resizeMode="cover"
+    >
+      <KeyboardAvoidingView
+        style={styles.screen}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
+        {/* Back */}
+        {screen !== "welcome" && (
+          <TouchableOpacity style={styles.backButton} onPress={() => setScreen("welcome")}>
+            <Text style={{ position: "absolute", left: 20, top: 1, color: "#90a3ecff", fontSize: 30 }}>
+              {"<"}
+            </Text>
+          </TouchableOpacity>
+        )}
 
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-      >
-        {screen != "welcome" && (
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => setScreen("welcome")}
-        >
-          <Text style={{position: 'absolute', left: 20, top: 1, color: '#90a3ecff', fontSize: 30}}>{'<'}</Text>
-        </TouchableOpacity>
-      )}
-
-        <Animated.View entering={FadeInUp.duration(500)}>
-          {/* Brand / Hero */}
-          <View style={styles.heroWrap}>
-            <LinearGradient
-              colors={["#22d3ee", "#3b82f6", "#a78bfa"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.heroBadge}
-            >
-              <Ionicons name="shield-checkmark" size={18} color="#f0f3ffff" />
-              <Text style={styles.heroBadgeText}>Secure & Private</Text>
-            </LinearGradient>
-
-            <Text style={styles.title}>{title}</Text>
-            <Text style={styles.subtitle}>Manage money with clarity</Text>
-          </View>
-        </Animated.View>
-
-        {/* Card */}
-
-
-          {screen === "welcome" && (
-              <Animated.View
-                entering={FadeInUp.duration(400)}
-                exiting={FadeOutDown.duration(300)}
+        {/* Content wrapper – fills screen, no scroll */}
+        <View style={styles.root(dyn)}>
+          {/* Hero */}
+          <Animated.View entering={FadeInUp.duration(400)}>
+            <View style={styles.heroWrap}>
+              <LinearGradient
+                colors={["#22d3ee", "#3b82f6", "#a78bfa"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.heroBadge}
               >
-            <View style={styles.container}>
-              <TouchableOpacity
-                style={[styles.btn, styles.btnPrimary]}
-                onPress={() => setScreen("register")}
-              >
-                <Text style={styles.btnText}>Get Started</Text>
-              </TouchableOpacity>
+                <Ionicons name="shield-checkmark" size={18} color="#f0f3ffff" />
+                <Text style={styles.heroBadgeText}>Secure & Private</Text>
+              </LinearGradient>
 
-              <TouchableOpacity onPress={() => setScreen("login")}>
-                <Text style={styles.smallText}>Have an account? Login</Text>
-              </TouchableOpacity>
+              <Text style={[styles.title, { fontSize: dyn.titleFs }]} numberOfLines={1} adjustsFontSizeToFit>
+                {title}
+              </Text>
+              <Text style={[styles.subtitle, { fontSize: dyn.subFs }]} numberOfLines={1} adjustsFontSizeToFit>
+                Manage money with clarity
+              </Text>
             </View>
-            </Animated.View>
-          )}
+          </Animated.View>
 
-            {/* Register */}
-            {screen === "register" && (
-              <Animated.View
-                entering={FadeInUp.duration(400).delay(100)}
-                exiting={FadeOutDown.duration(300)}
-              >
-              <View>
-                <Input
-                  icon="person-circle-outline"
-                  placeholder="Name (optional)"
-                  value={name}
-                  onChangeText={setName}
-                  autoCapitalize="words"
-                  textContentType="name"
-                />
-                <Input
-                  icon="id-card-outline"
-                  placeholder="Surname (optional)"
-                  value={surname}
-                  onChangeText={setSurname}
-                  autoCapitalize="words"
-                  textContentType="familyName"
-                />
-                <Input
-                  icon="mail-outline"
-                  placeholder="Email"
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  textContentType="emailAddress"
-                />
-                <Input
-                  icon="lock-closed-outline"
-                  placeholder="Password (min 6 characters)"
-                  value={password}
-                  onChangeText={setPassword}
-                  autoCapitalize="none"
-                  secureTextEntry={secure}
-                  rightIcon={secure ? "eye-outline" : "eye-off-outline"}
-                  onRightIconPress={() => setSecure((v) => !v)}
-                  textContentType="password"
-                />
-                <TouchableOpacity
-                  style={[styles.btn, styles.btnPrimary]}
-                  onPress={handleRegister}
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <>
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={18}
-                        color="#fff"
-                      />
-                      <Text style={styles.btnText}>Create account</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
+          {/* Body – switches per screen */}
+          <View style={styles.body}>
+            {screen === "welcome" && (
+              <Animated.View entering={FadeInUp.duration(300)} exiting={FadeOutDown.duration(250)}>
+                <View style={styles.container}>
+                  <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={() => setScreen("register")}>
+                    <Text style={styles.btnText}>Get Started</Text>
+                  </TouchableOpacity>
 
-              </View>
-              </Animated.View>
-            )}
-
-            {/* Login */}
-            {screen === "login" && (
-                <Animated.View
-                entering={FadeInUp.duration(400).delay(100)}
-                exiting={FadeOutDown.duration(300)}
-                > 
-              <View>
-                <Input
-                  icon="mail-outline"
-                  placeholder="Email"
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  textContentType="emailAddress"
-                />
-                <Input
-                  icon="lock-closed-outline"
-                  placeholder="Password"
-                  value={password}
-                  onChangeText={setPassword}
-                  autoCapitalize="none"
-                  secureTextEntry={secure}
-                  rightIcon={secure ? "eye-outline" : "eye-off-outline"}
-                  onRightIconPress={() => setSecure((v) => !v)}
-                  textContentType="password"
-                />
-                <TouchableOpacity
-                  style={[styles.btn, styles.btnIndigo]}
-                  onPress={handleLogin}
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <>
-                      <Ionicons name="log-in" size={18} color="#fff" />
-                      <Text style={styles.btnText}>Login</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-
-
-                <View style={styles.dividerRow}>
-                  <View style={styles.divider} />
-                  <Text style={styles.dividerText}>or</Text>
-                  <View style={styles.divider} />
+                  <TouchableOpacity onPress={() => setScreen("login")}>
+                    <Text style={styles.smallText}>Have an account? Login</Text>
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  style={[styles.btn, styles.btnGoogle]}
-                  disabled={!request}
-                  onPress={onGooglePress}
-                >
-                  <Ionicons name="logo-google" size={18} color="#111827" />
-                  <Text style={[styles.btnText, styles.btnTextDark]}>
-                    Sign in with Google
-                  </Text>
-                </TouchableOpacity>
-
-              </View>
               </Animated.View>
             )}
-      </ScrollView>
 
-      {isLoading && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#60a5fa" />
-          <Text style={styles.loadingText}>Processing…</Text>
+            {screen === "register" && (
+              <Animated.View entering={FadeInUp.duration(300).delay(80)} exiting={FadeOutDown.duration(250)}>
+                <View>
+                  <Input
+                    icon="person-circle-outline"
+                    placeholder="Name (optional)"
+                    value={name}
+                    onChangeText={setName}
+                    autoCapitalize="words"
+                    textContentType="name"
+                    inputHeight={dyn.inputH}
+                  />
+                  <Input
+                    icon="id-card-outline"
+                    placeholder="Surname (optional)"
+                    value={surname}
+                    onChangeText={setSurname}
+                    autoCapitalize="words"
+                    textContentType="familyName"
+                    inputHeight={dyn.inputH}
+                  />
+                  <Input
+                    icon="mail-outline"
+                    placeholder="Email"
+                    value={email}
+                    onChangeText={setEmail}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    textContentType="emailAddress"
+                    inputHeight={dyn.inputH}
+                  />
+                  <Input
+                    icon="lock-closed-outline"
+                    placeholder="Password (min 6 characters)"
+                    value={password}
+                    onChangeText={setPassword}
+                    autoCapitalize="none"
+                    secureTextEntry
+                    rightIcon={secure ? "eye-outline" : "eye-off-outline"}
+                    onRightIconPress={() => setSecure((v) => !v)}
+                    textContentType="password"
+                    inputHeight={dyn.inputH}
+                  />
+
+                  <TouchableOpacity
+                    style={[styles.btn, styles.btnPrimary]}
+                    onPress={handleRegister}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                        <Text style={styles.btnText}>Create account</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </Animated.View>
+            )}
+
+            {screen === "login" && (
+              <Animated.View entering={FadeInUp.duration(300).delay(80)} exiting={FadeOutDown.duration(250)}>
+                <View>
+                  <Input
+                    icon="mail-outline"
+                    placeholder="Email"
+                    value={email}
+                    onChangeText={setEmail}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    textContentType="emailAddress"
+                    inputHeight={dyn.inputH}
+                  />
+                  <Input
+                    icon="lock-closed-outline"
+                    placeholder="Password"
+                    value={password}
+                    onChangeText={setPassword}
+                    autoCapitalize="none"
+                    secureTextEntry={secure}
+                    rightIcon={secure ? "eye-outline" : "eye-off-outline"}
+                    onRightIconPress={() => setSecure((v) => !v)}
+                    textContentType="password"
+                    inputHeight={dyn.inputH}
+                  />
+
+                  <TouchableOpacity
+                    style={[styles.btn, styles.btnIndigo]}
+                    onPress={handleLogin}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="log-in" size={18} color="#fff" />
+                        <Text style={styles.btnText}>Login</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+
+                  <View style={styles.dividerRow}>
+                    <View style={styles.divider} />
+                    <Text style={styles.dividerText}>or</Text>
+                    <View style={styles.divider} />
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.btn, styles.btnGoogle]}
+                    disabled={!request}
+                    onPress={onGooglePress}
+                  >
+                    <Ionicons name="logo-google" size={18} color="#111827" />
+                    <Text style={[styles.btnText, styles.btnTextDark]}>Sign in with Google</Text>
+                  </TouchableOpacity>
+                </View>
+              </Animated.View>
+            )}
+          </View>
         </View>
-      )}
 
-
+        {isLoading && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color="#60a5fa" />
+            <Text style={styles.loadingText}>Processing…</Text>
+          </View>
+        )}
+      </KeyboardAvoidingView>
     </ImageBackground>
-    
   );
 }
 
@@ -417,6 +409,7 @@ type InputProps = {
   keyboardType?: any;
   secureTextEntry?: boolean;
   textContentType?: any;
+  inputHeight?: number;
 };
 
 function Input(props: InputProps) {
@@ -431,16 +424,12 @@ function Input(props: InputProps) {
     keyboardType,
     secureTextEntry,
     textContentType,
+    inputHeight = 48,
   } = props;
 
   return (
-    <View style={styles.inputWrap}>
-      <Ionicons
-        name={icon}
-        size={18}
-        color="#93c5fd"
-        style={{ marginRight: 10 }}
-      />
+    <View style={[styles.inputWrap, { height: inputHeight }]}>
+      <Ionicons name={icon} size={18} color="#93c5fd" style={{ marginRight: 10 }} />
       <TextInput
         style={styles.input}
         placeholder={placeholder}
@@ -453,10 +442,7 @@ function Input(props: InputProps) {
         textContentType={textContentType}
       />
       {rightIcon ? (
-        <TouchableOpacity
-          onPress={onRightIconPress}
-          hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
-        >
+        <TouchableOpacity onPress={onRightIconPress} hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}>
           <Ionicons name={rightIcon} size={18} color="#93c5fd" />
         </TouchableOpacity>
       ) : null}
@@ -468,66 +454,66 @@ function Input(props: InputProps) {
 
 const styles = StyleSheet.create({
   screen: {
+    flex: 1,
     width: "100%",
-    backgroundColor: "#f8fafc", // clean white background with slight gray tint
+    backgroundColor: "transparent",
   },
-  scroll: {
-    width: "100%",
-    paddingTop: 80,
-    paddingBottom: 40,
+
+  // fills the viewport height, uses gaps that scale down on small screens
+  root: (dyn: { heroTopPad: number; sectionGap: number; blockPadV: number }) => ({
+    flex: 1,
+    paddingTop: dyn.heroTopPad,
     paddingHorizontal: 20,
-  },
+    paddingBottom: 16,
+    gap: dyn.sectionGap,
+    justifyContent: "space-between", // forces content to fit without scroll
+  }),
+
   heroWrap: {
     alignItems: "center",
-    marginBottom: 30,
-    paddingTop:100,
   },
   heroBadge: {
     flexDirection: "row",
     gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: "rgba(59,130,246,0.1)", // light blue badge background
+    backgroundColor: "rgba(59,130,246,0.1)",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   heroBadgeText: {
-    color: "#2563eb", // primary blue text
+    color: "#2563eb",
     fontWeight: "600",
   },
   title: {
-    fontSize: 40,
     fontWeight: "800",
-    color: "#0f172a", // dark navy text
+    color: "#0f172a",
     textAlign: "center",
   },
-subtitle: {
-    fontSize: 17,
-    color: "#475569", // slate gray
+  subtitle: {
+    color: "#475569",
     textAlign: "center",
-    marginTop: 6,
+    marginTop: 4,
   },
-  cardWrap: {
-    marginTop: 20,
+
+  body: {
+    // the form area
   },
+
   container: {
-    flex: 1,
-    justifyContent: "flex-end", // push content to bottom
     alignItems: "center",
-    paddingTop: 430, // some space from top edge
   },
 
   inputWrap: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f1f5f9", // light gray input bg
+    backgroundColor: "#f1f5f9",
     borderWidth: 1,
     borderColor: "rgba(59,130,246,0.25)",
     paddingHorizontal: 12,
     borderRadius: 14,
-    marginBottom: 14,
-    height: 52,
+    marginBottom: 12,
   },
   input: {
     flex: 1,
@@ -539,33 +525,33 @@ subtitle: {
     gap: 8,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderRadius: 14,
-    width: "95%",
-    marginTop: 12,
+    width: "100%",
+    marginTop: 10,
   },
-   btnPrimary: {
-    backgroundColor: "#3b6df6ff", // main blue
+  btnPrimary: {
+    backgroundColor: "#3b6df6ff",
     shadowColor: "#3b82f6",
-    shadowOpacity: 0.4,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
   backButton: {
     position: "absolute",
-    top: 50, // adjust for safe area / status bar
-    left: 20,
-    backgroundColor: "rgba(255, 255, 255, 0)", // subtle transparent background,
-    padding: 10,
+    top: 50,
+    left: 0,
+    padding: 16,
+    zIndex: 10,
   },
   btnIndigo: {
-    backgroundColor: "#2563eb", // deeper blue
+    backgroundColor: "#2563eb",
     shadowColor: "#2563eb",
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 5,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
   btnGoogle: {
     backgroundColor: "#ffffff",
@@ -574,50 +560,47 @@ subtitle: {
   btnText: {
     color: "#fff",
     fontSize: 16,
-    width: 200,
     textAlign: "center",
     fontWeight: "700",
   },
   btnTextDark: {
-    color: "#1e293b", // dark slate
+    color: "#1e293b",
   },
 
   dividerRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: 12,
+    marginVertical: 10,
     gap: 8,
   },
- divider: {
+  divider: {
     flex: 1,
     height: 1,
-    backgroundColor: "#e2e8f0", // light gray divider
+    backgroundColor: "#e2e8f0",
   },
   dividerText: {
     color: "#ffffffff",
     fontSize: 14,
   },
-  
 
-
-loadingOverlay: {
+  loadingOverlay: {
     position: "absolute",
     left: 0,
     right: 0,
     top: 0,
     bottom: 0,
-    backgroundColor: "rgba(255,255,255,0.6)", // light overlay
+    backgroundColor: "rgba(255,255,255,0.6)",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
   },
   loadingText: {
-    color: "#bfdbfe", // pale blue
+    color: "#bfdbfe",
   },
-    smallText: {
-      paddingTop: 10,
+  smallText: {
+    paddingTop: 10,
     fontSize: 15,
-    color: "#dae2f0ff", // gray-600
+    color: "#dae2f0ff",
     textAlign: "center",
   },
 });
