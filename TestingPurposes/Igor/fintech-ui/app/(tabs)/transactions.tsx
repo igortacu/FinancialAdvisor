@@ -25,35 +25,42 @@ import { MOCK_RECEIPT, type ParsedReceipt } from "@/lib/receipt-mock";
 import { supabase } from "../../api";
 import { useAuth } from "@/store/auth";
 
+/** ========= DB bindings (edit to match table/columns) ========= */
+const TABLE = "ledger";
+const COLS = {
+  id: "id",
+  user_id: "user_id",
+  date: "moment",
+  currency: "currency",
+  net: "net_amount",
+  expense: "expense",
+  income: "income",
+  merchant: "merchant", // e.g. "payee" / "counterparty" if different
+  name: "note",         // short text/description
+  category: "category", // remove if absent
+  meta: "meta",         // remove if absent
+} as const;
+/** ============================================================ */
+
 const USE_MOCK = true;
 
-/* ============== Types ============== */
-type TxRow = {
+/* ============== UI Types ============== */
+type TxRowUI = {
   id: string;
   user_id: string;
   name: string;
   merchant?: string | null;
-  amount: number; // negative = expense
-  currency: string; // "MDL"
-  category: string;
+  amount: number; // signed; negative = expense
+  currency: string;
+  category?: string | null;
   date: string; // ISO
   meta?: any;
-  created_at?: string;
 };
 
-type Category =
-  | "Groceries"
-  | "Fuel"
-  | "Utilities"
-  | "Health"
-  | "Transport"
-  | "Shopping"
-  | "General";
-
 /* ============== currency (MDL) ============== */
-const nfMDL = (globalThis as any).Intl?.NumberFormat
-  ? new Intl.NumberFormat("ro-MD", { style: "currency", currency: "MDL" })
-  : null;
+const nfMDL =
+  (globalThis as any).Intl?.NumberFormat &&
+  new Intl.NumberFormat("ro-MD", { style: "currency", currency: "MDL" });
 
 function fmtMDL(n: number, withSign = false) {
   const sign = n < 0 ? "-" : withSign ? "+" : "";
@@ -64,6 +71,16 @@ function fmtMDL(n: number, withSign = false) {
 
 /* ============== helpers ============== */
 const normalize = (s: string) => s.replace(/\s{2,}/g, " ").trim();
+
+type Category =
+  | "Groceries"
+  | "Fuel"
+  | "Utilities"
+  | "Health"
+  | "Transport"
+  | "Shopping"
+  | "General";
+
 const guessCategory = (merchant: string): Category => {
   const m = merchant.toUpperCase();
   if (/(KAUFLAND|LINELLA|GREEN HILLS|SUPERMARKET|MARKET)/.test(m))
@@ -75,13 +92,13 @@ const guessCategory = (merchant: string): Category => {
   if (/(H&M|ZARA|UNIQLO|CCC|LC WAIKIKI)/.test(m)) return "Shopping";
   return "General";
 };
+
 const totalOf = (p: ParsedReceipt) =>
   (p.total ??
     p.items.reduce(
       (s, it) => s + (it.total ?? (it.qty || 1) * (it.unitPrice || 0)),
       0,
-    )) ||
-  0;
+    )) || 0;
 
 const CATEGORIES: Category[] = [
   "General",
@@ -99,8 +116,8 @@ export default function Transactions() {
   const { user } = useAuth();
 
   // ---- list + paging
-  const [list, setList] = React.useState<TxRow[]>([]);
-  const [loading, setLoading] = React.useState(false); // start false to avoid spinner lock
+  const [list, setList] = React.useState<TxRowUI[]>([]);
+  const [loading, setLoading] = React.useState(false);
   const [refreshing, setRefreshing] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [hasMore, setHasMore] = React.useState(true);
@@ -144,53 +161,53 @@ export default function Transactions() {
   const [userId, setUserId] = React.useState<string | null>(
     user?.userId ?? null,
   );
+
+  // auth bootstrap + listener
   React.useEffect(() => {
     let mounted = true;
+
     (async () => {
-      if (user?.userId) {
-        setUserId(user.userId);
-        return;
-      }
       const { data } = await supabase.auth.getUser();
       if (mounted) setUserId(data.user?.id ?? null);
     })();
+
+    const sub = supabase.auth.onAuthStateChange((_evt, session) => {
+      setUserId(session?.user?.id ?? null);
+    });
+
     return () => {
       mounted = false;
+      sub.data.subscription.unsubscribe();
     };
-  }, [user?.userId]);
+  }, []);
 
-  // ---- initial load + realtime
+  // initial load + realtime
   React.useEffect(() => {
     if (!userId) {
-      setLoading(false); // avoid infinite spinner while auth resolves
+      setLoading(false);
       return;
     }
 
     loadPage(true).catch(() => setLoading(false));
 
     const ch = supabase
-      .channel("tx_changes")
+      .channel("ledger_changes")
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
-          table: "transactions",
-          filter: `user_id=eq.${userId}`,
+          table: TABLE,
+          filter: `${COLS.user_id}=eq.${userId}`,
         },
         (payload) => {
           if (payload.eventType === "INSERT") {
-            setList((p) => [payload.new as any as TxRow, ...p]);
+            setList((p) => [mapDBToUI(payload.new as any), ...p]);
           } else if (payload.eventType === "DELETE") {
-            setList((p) => p.filter((t) => t.id !== (payload.old as any).id));
+            setList((p) => p.filter((t) => t.id !== (payload.old as any)[COLS.id]));
           } else if (payload.eventType === "UPDATE") {
-            setList((p) =>
-              p.map((t) =>
-                t.id === (payload.new as any).id
-                  ? (payload.new as any as TxRow)
-                  : t,
-              ),
-            );
+            const mapped = mapDBToUI(payload.new as any);
+            setList((p) => p.map((t) => (t.id === mapped.id ? mapped : t)));
           }
         },
       )
@@ -204,7 +221,6 @@ export default function Transactions() {
 
   async function loadPage(reset = false) {
     if (!userId) return;
-
     if (!reset && loading) return;
 
     if (reset) {
@@ -217,16 +233,17 @@ export default function Transactions() {
       const to = from + PAGE_SIZE - 1;
 
       const { data, error } = await supabase
-        .from("transactions")
+        .from(TABLE)
         .select("*")
-        .eq("user_id", userId)
-        .order("date", { ascending: false })
+        .eq(COLS.user_id, userId)
+        .order(COLS.date, { ascending: false })
         .range(from, to);
 
       if (error) throw error;
 
-      if (reset) setList((data || []) as TxRow[]);
-      else setList((p) => [...p, ...(data as TxRow[])]);
+      const mapped = (data || []).map(mapDBToUI);
+      if (reset) setList(mapped);
+      else setList((p) => [...p, ...mapped]);
 
       if (!data || data.length < PAGE_SIZE) setHasMore(false);
     } catch (e: any) {
@@ -258,15 +275,12 @@ export default function Transactions() {
       if (Platform.OS !== "web") {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (perm.status !== "granted") {
-          Alert.alert(
-            "Photos blocked",
-            "Allow Photos access to attach receipts.",
-          );
+          Alert.alert("Photos blocked", "Allow Photos access to attach receipts.");
           return;
         }
       }
       const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images, // correct enum
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.9,
         base64: true,
         allowsMultipleSelection: false,
@@ -284,10 +298,7 @@ export default function Transactions() {
       if (Platform.OS !== "web") {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (perm.status !== "granted") {
-          Alert.alert(
-            "Camera blocked",
-            "Allow Camera access to scan receipts.",
-          );
+          Alert.alert("Camera blocked", "Allow Camera access to scan receipts.");
           return;
         }
       }
@@ -313,63 +324,79 @@ export default function Transactions() {
         setParsed(MOCK_RECEIPT);
         return;
       }
-      // TODO: OCR → parse → setParsed(parsedReceipt)
+      // TODO OCR
     } finally {
       setBusy(false);
     }
   }
 
+  // ------- INSERT into ledger -------
   async function addParsedAsTransaction() {
     if (!parsed || !userId) return;
+
     const merchant = normalize(parsed.merchant);
-    const row: Omit<TxRow, "id"> = {
-      user_id: userId,
-      name: merchant,
-      merchant,
-      date: new Date().toISOString(),
-      amount: -Number(totalOf(parsed).toFixed(2)),
-      currency: "MDL",
-      category: guessCategory(merchant),
-      meta: parsed,
+    const total = Number(totalOf(parsed).toFixed(2)); // positive
+    const row: Record<string, any> = {
+      [COLS.user_id]: userId,
+      [COLS.date]: new Date().toISOString(),
+      [COLS.currency]: parsed.currency || "MDL",
+      [COLS.net]: -total,
+      [COLS.expense]: total,
+      [COLS.income]: 0,
+      [COLS.merchant]: merchant,
+      [COLS.name]: merchant,
+      [COLS.category]: guessCategory(merchant),
+      [COLS.meta]: parsed,
     };
+
     const { data, error } = await supabase
-      .from("transactions")
+      .from(TABLE)
       .insert(row)
       .select()
       .single();
+
     if (error) {
-      Alert.alert("Error", error.message);
+      console.error("Insert failed:", error);
+      Alert.alert("Insert failed", JSON.stringify(error, null, 2));
       return;
     }
-    setList((p) => [data as TxRow, ...p]);
+
+    setList((p) => [mapDBToUI(data), ...p]);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
-      () => {},
+      () => {}
     );
     setScanOpen(false);
   }
 
   async function addManual() {
     if (!userId) return;
-    const row: Omit<TxRow, "id"> = {
-      user_id: userId,
-      name: "Manual Entry",
-      merchant: null,
-      date: new Date().toISOString(),
-      amount: -123.45,
-      currency: "MDL",
-      category: "General",
-      meta: null,
+    const total = 123.45;
+    const row: Record<string, any> = {
+      [COLS.user_id]: userId,
+      [COLS.date]: new Date().toISOString(),
+      [COLS.currency]: "MDL",
+      [COLS.net]: -total,
+      [COLS.expense]: total,
+      [COLS.income]: 0,
+      [COLS.merchant]: null,
+      [COLS.name]: "Manual Entry",
+      [COLS.category]: "General",
+      [COLS.meta]: null,
     };
+
     const { data, error } = await supabase
-      .from("transactions")
+      .from(TABLE)
       .insert(row)
       .select()
       .single();
+
     if (error) {
-      Alert.alert("Error", error.message);
+      console.error("Insert failed:", error);
+      Alert.alert("Insert failed", JSON.stringify(error, null, 2));
       return;
     }
-    setList((p) => [data as TxRow, ...p]);
+
+    setList((p) => [mapDBToUI(data), ...p]);
   }
 
   async function deleteTx(id: string) {
@@ -379,10 +406,7 @@ export default function Transactions() {
         text: "Delete",
         style: "destructive",
         onPress: async () => {
-          const { error } = await supabase
-            .from("transactions")
-            .delete()
-            .eq("id", id);
+          const { error } = await supabase.from(TABLE).delete().eq(COLS.id, id);
           if (error) Alert.alert("Error", error.message);
         },
       },
@@ -425,7 +449,7 @@ export default function Transactions() {
         </Pressable>
       </Animated.View>
 
-      {/* tiny status (debug) */}
+      {/* tiny status */}
       <View style={{ paddingHorizontal: 16, marginBottom: 6 }}>
         <Text style={{ color: "#6B7280", fontSize: 12 }}>
           userId: {userId ? "ok" : "none"} · loading: {String(loading)} · rows:{" "}
@@ -527,7 +551,7 @@ export default function Transactions() {
                   <View style={{ flex: 1 }}>
                     <Text style={s.title}>{t.name}</Text>
                     <Text style={s.sub}>
-                      {new Date(t.date).toLocaleString()} • {t.category}
+                      {new Date(t.date).toLocaleString()} • {t.category ?? "—"}
                     </Text>
                   </View>
                   <Text
@@ -544,31 +568,12 @@ export default function Transactions() {
           ))
         )}
 
-        {!loading && hasMore && (
+        {!loading && hasMore && list.length > 0 && (
           <View style={{ alignItems: "center", paddingTop: 8 }}>
             <ActivityIndicator />
           </View>
         )}
       </ScrollView>
-
-      {/* Quick actions */}
-      <Animated.View
-        entering={FadeInUp.delay(80).duration(380)}
-        style={s.actionsRow}
-      >
-        <ActionTile
-          icon="camera"
-          label="Scan receipt"
-          hint="Fast add"
-          onPress={openScan}
-        />
-        <ActionTile
-          icon="add-circle-outline"
-          label="Add manual"
-          hint="Custom entry"
-          onPress={addManual}
-        />
-      </Animated.View>
 
       {/* Scan / Review modal */}
       <Modal
@@ -667,7 +672,7 @@ export default function Transactions() {
                   style={s.primaryBg}
                 >
                   <Ionicons name="add-circle-outline" size={18} color="#fff" />
-                  <Text style={s.primaryText}>Add to transactions</Text>
+                  <Text style={s.primaryText}>Add to ledger</Text>
                 </LinearGradient>
               </Pressable>
             </ScrollView>
@@ -678,36 +683,25 @@ export default function Transactions() {
   );
 }
 
-/* ---------- Subcomponents ---------- */
-
-function ActionTile({
-  icon,
-  label,
-  hint,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  hint?: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [s.tile, pressed && { opacity: 0.9 }]}
-    >
-      <View style={s.tileIcon}>
-        <Ionicons name={icon} size={18} color="#246BFD" />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={s.tileLabel}>{label}</Text>
-        {hint ? <Text style={s.tileHint}>{hint}</Text> : null}
-      </View>
-      <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
-    </Pressable>
-  );
+/* ---------- Mapping helpers ---------- */
+function mapDBToUI(row: any): TxRowUI {
+  return {
+    id: row[COLS.id],
+    user_id: row[COLS.user_id],
+    name: row[COLS.name] ?? row[COLS.merchant] ?? "Entry",
+    merchant: row[COLS.merchant] ?? null,
+    amount:
+      typeof row[COLS.net] === "number"
+        ? row[COLS.net]
+        : Number(row[COLS.income] || 0) - Number(row[COLS.expense] || 0),
+    currency: row[COLS.currency] ?? "MDL",
+    category: row[COLS.category] ?? null,
+    date: row[COLS.date],
+    meta: row[COLS.meta],
+  };
 }
 
+/* ---------- Subcomponents ---------- */
 function ActionWide({
   icon,
   label,
@@ -831,8 +825,6 @@ const s = StyleSheet.create({
     elevation: 6,
   },
 
-  // debug chip area uses default text styling
-
   kpisRow: {
     flexDirection: "row",
     gap: 12,
@@ -877,39 +869,6 @@ const s = StyleSheet.create({
     marginLeft: 4,
   },
   monthText: { color: "#111827", fontWeight: "800" },
-
-  actionsRow: {
-    paddingHorizontal: 16,
-    position: "absolute",
-    bottom: 16,
-    left: 0,
-    right: 0,
-    gap: 10,
-  },
-
-  tile: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    shadowColor: "#001A4D",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  tileIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: "#EEF4FF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tileLabel: { fontWeight: "800", color: "#111827" },
-  tileHint: { color: "#6B7280", fontSize: 12 },
 
   row: { flexDirection: "row", alignItems: "center", gap: 10 },
   title: { fontWeight: "800" },

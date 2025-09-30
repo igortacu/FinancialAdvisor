@@ -25,7 +25,7 @@ import {
 import { supabase } from "../../api";
 import { positions as mockSparks } from "@/constants/mock";
 
-// ---------- Types ----------
+/* ================== Types ================== */
 type Holding = {
   id: number | string;
   symbol: string;
@@ -46,58 +46,17 @@ type DCAPlan = {
 };
 type Point = { x: number | string; y: number };
 
-// ---------- Config ----------
-const FINNHUB_KEY = process.env.EXPO_PUBLIC_FINNHUB_TOKEN || "";
-const QUOTE_BASE = "https://finnhub.io/api/v1/quote";
-const CANDLE_BASE = "https://finnhub.io/api/v1/stock/candle";
+/* ================== Config ================== */
+// Public values only. Server secret stays in Edge Function.
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
 
-// ---------- Mock base (structure only; prices replaced by live quotes) ----------
+/* ================== Mock data ================== */
 const MOCK_HOLDINGS: Holding[] = [
-  {
-    id: 1,
-    symbol: "AAPL",
-    name: "Apple",
-    quantity: 12,
-    avg_price: 165,
-    current_price: 165,
-    sector: "Tech",
-  },
-  {
-    id: 2,
-    symbol: "MSFT",
-    name: "Microsoft",
-    quantity: 8,
-    avg_price: 320,
-    current_price: 320,
-    sector: "Tech",
-  },
-  {
-    id: 3,
-    symbol: "VOO",
-    name: "Vanguard S&P 500",
-    quantity: 5,
-    avg_price: 433,
-    current_price: 433,
-    sector: "ETF",
-  },
-  {
-    id: 4,
-    symbol: "TSLA",
-    name: "Tesla",
-    quantity: 6,
-    avg_price: 195,
-    current_price: 195,
-    sector: "Auto",
-  },
-  {
-    id: 5,
-    symbol: "CASH",
-    name: "Cash",
-    quantity: 1,
-    avg_price: 1,
-    current_price: 1,
-    sector: "Cash",
-  },
+  { id: 1, symbol: "AAPL", name: "Apple", quantity: 12, avg_price: 165, current_price: 165, sector: "Tech" },
+  { id: 2, symbol: "MSFT", name: "Microsoft", quantity: 8, avg_price: 320, current_price: 320, sector: "Tech" },
+  { id: 3, symbol: "VOO", name: "Vanguard S&P 500", quantity: 5, avg_price: 433, current_price: 433, sector: "ETF" },
+  { id: 4, symbol: "TSLA", name: "Tesla", quantity: 6, avg_price: 195, current_price: 195, sector: "Auto" },
+  { id: 5, symbol: "CASH", name: "Cash", quantity: 1, avg_price: 1, current_price: 1, sector: "Cash" },
 ];
 const MOCK_DIVIDENDS: Dividend[] = [
   { id: "d1", symbol: "AAPL", date: "2025-10-05", amount: 2.64 },
@@ -105,31 +64,16 @@ const MOCK_DIVIDENDS: Dividend[] = [
   { id: "d3", symbol: "MSFT", date: "2025-10-20", amount: 3.1 },
 ];
 const MOCK_DCA: DCAPlan[] = [
-  {
-    id: "p1",
-    symbol: "VOO",
-    frequency: "monthly",
-    amount: 200,
-    last: "2025-09-15",
-    next: "2025-10-15",
-  },
-  {
-    id: "p2",
-    symbol: "AAPL",
-    frequency: "biweekly",
-    amount: 100,
-    last: "2025-09-20",
-    next: "2025-10-04",
-  },
+  { id: "p1", symbol: "VOO", frequency: "monthly", amount: 200, last: "2025-09-15", next: "2025-10-15" },
+  { id: "p2", symbol: "AAPL", frequency: "biweekly", amount: 100, last: "2025-09-20", next: "2025-10-04" },
 ];
 
-// ---------- Utils ----------
+/* ================== Utils ================== */
 const nf = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
 const money = (v: number) => `$${nf.format(v)}`;
 const pct = (v: number) => `${v >= 0 ? "+" : ""}${nf.format(v)}%`;
 const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
 
-// drawdown series from prices
 function drawdownSeries(values: number[]): Point[] {
   if (!values.length) return [{ x: 1, y: 0 }];
   let peak = values[0];
@@ -141,7 +85,7 @@ function drawdownSeries(values: number[]): Point[] {
   });
   return out;
 }
-// rolling 30-day volatility (daily pct returns, annualized approx)
+
 function rollingVol(values: number[], window = 30): Point[] {
   if (values.length < window + 1) return [{ x: 1, y: 0 }];
   const pts: Point[] = [];
@@ -160,13 +104,17 @@ function rollingVol(values: number[], window = 30): Point[] {
   return pts;
 }
 
-// ---------- Live fetch ----------
+/* ================== Market-data proxy ================== */
+function proxy(path: string, qs: string) {
+  const base = `${SUPABASE_URL}/functions/v1/finnhub-proxy`;
+  const url = `${base}?path=${encodeURIComponent(path)}&qs=${encodeURIComponent(qs)}`;
+  return fetch(url);
+}
+
 async function fetchQuote(symbol: string): Promise<number | null> {
-  if (!FINNHUB_KEY) return null;
   try {
-    const r = await fetch(
-      `${QUOTE_BASE}?symbol=${encodeURIComponent(symbol)}&token=${FINNHUB_KEY}`,
-    );
+    const r = await proxy("quote", `symbol=${encodeURIComponent(symbol)}`);
+    if (!r.ok) throw new Error(`Quote ${r.status}`);
     const j = await r.json();
     const price = Number(j?.c);
     return Number.isFinite(price) && price > 0 ? price : null;
@@ -174,32 +122,50 @@ async function fetchQuote(symbol: string): Promise<number | null> {
     return null;
   }
 }
+
 async function fetchQuotes(symbols: string[]): Promise<Record<string, number>> {
-  const res: Record<string, number> = {};
-  await Promise.all(
-    symbols.map(async (s) => {
-      const p = await fetchQuote(s);
-      if (p != null) res[s] = p;
-    }),
-  );
-  return res;
+  const out: Record<string, number> = {};
+  for (const s of symbols) {
+    const p = await fetchQuote(s);
+    if (p != null) out[s] = p;
+    // throttle a bit
+    await new Promise((res) => setTimeout(res, 120));
+  }
+  return out;
 }
+
 async function fetchCandles(symbol = "SPY"): Promise<number[]> {
-  if (!FINNHUB_KEY) return [];
   try {
     const to = Math.floor(Date.now() / 1000) - 60;
     const from = to - 220 * 86400; // ~7 months
-    const r = await fetch(
-      `${CANDLE_BASE}?symbol=${symbol}&resolution=D&from=${from}&to=${to}&token=${FINNHUB_KEY}`,
-    );
+    const qs = `symbol=${encodeURIComponent(symbol)}&resolution=D&from=${from}&to=${to}`;
+    const r = await proxy("stock/candle", qs);
+    if (!r.ok) throw new Error(`Candle ${r.status}`);
     const j = await r.json();
     if (j?.s !== "ok" || !Array.isArray(j?.c)) return [];
-    return j.c.map((v: any) => Number(v)).filter((n) => Number.isFinite(n));
+    return j.c.map((v: unknown) => Number(v)).filter(Number.isFinite);
   } catch {
     return [];
   }
 }
 
+// CSV fallback for SPY from Stooq (no key)
+async function fetchCandlesFallback(symbol = "SPY"): Promise<number[]> {
+  try {
+    const map: Record<string, string> = { SPY: "spy.us" };
+    const code = map[symbol] ?? `${symbol.toLowerCase()}.us`;
+    const r = await fetch(`https://stooq.com/q/d/l/?s=${code}&i=d`);
+    if (!r.ok) return [];
+    const csv = await r.text();
+    const lines = csv.trim().split("\n").slice(1);
+    const closes = lines.map((l) => Number(l.split(",")[4])).filter(Number.isFinite);
+    return closes.slice(-220);
+  } catch {
+    return [];
+  }
+}
+
+/* ================== Screen ================== */
 export default function Investments(): React.ReactElement {
   const insets = useSafeAreaInsets();
 
@@ -213,11 +179,11 @@ export default function Investments(): React.ReactElement {
     setLoading(true);
     setErr(null);
     try {
-      // optional Supabase rows → structure only
       const { data, error } = await supabase
         .from("investments")
         .select("*")
         .order("id", { ascending: false });
+
       let rows: Holding[] = MOCK_HOLDINGS;
       if (!error && Array.isArray(data) && data.length > 0) {
         rows = data.map((r: any, idx: number) => ({
@@ -230,23 +196,19 @@ export default function Investments(): React.ReactElement {
           sector: r.sector ?? undefined,
         }));
       }
-      // live quotes
-      const symbols = rows
-        .filter((h) => h.symbol !== "CASH")
-        .map((h) => h.symbol);
+
+      const symbols = rows.filter((h) => h.symbol !== "CASH").map((h) => h.symbol);
       const quotes = await fetchQuotes(symbols);
       const merged = rows.map((h) =>
-        h.symbol === "CASH"
-          ? h
-          : { ...h, current_price: quotes[h.symbol] ?? h.current_price },
+        h.symbol === "CASH" ? h : { ...h, current_price: quotes[h.symbol] ?? h.current_price }
       );
       setHoldings(merged);
 
-      // benchmark candles
       const s = await fetchCandles("SPY");
-      setSpy(s);
+      setSpy(s.length ? s : await fetchCandlesFallback("SPY"));
     } catch (e: any) {
-      setErr(e?.message ?? "Load failed");
+      const msg = String(e?.message ?? "Load failed");
+      setErr(msg);
     } finally {
       setLoading(false);
     }
@@ -262,7 +224,7 @@ export default function Investments(): React.ReactElement {
     setRefreshing(false);
   }, [load]);
 
-  // ---------- Derived metrics ----------
+  /* ===== Derived metrics ===== */
   const derived = React.useMemo(() => {
     const totalValue = sum(holdings.map((h) => h.quantity * h.current_price));
     const nonCash = holdings.filter((h) => h.symbol !== "CASH");
@@ -271,17 +233,15 @@ export default function Investments(): React.ReactElement {
       (holdings.find((h) => h.symbol === "CASH")?.current_price ?? 0);
     const totalPL = totalValue - totalCost;
     const dayPL = sum(
-      nonCash.map((h) => h.quantity * (h.current_price - h.avg_price) * 0.002),
+      nonCash.map((h) => h.quantity * (h.current_price - h.avg_price) * 0.002)
     );
 
-    // weights + allocation
     const weights = holdings
       .map((h) => ({
         symbol: h.symbol,
         name: h.name ?? h.symbol,
         value: h.quantity * h.current_price,
-        weight:
-          totalValue > 0 ? (h.quantity * h.current_price) / totalValue : 0,
+        weight: totalValue > 0 ? (h.quantity * h.current_price) / totalValue : 0,
         sector: h.sector ?? "Other",
         pnl: h.quantity * (h.current_price - h.avg_price),
       }))
@@ -293,20 +253,20 @@ export default function Investments(): React.ReactElement {
       allocMap[w.sector] = (allocMap[w.sector] ?? 0) + w.weight;
     });
 
-    // charts data
     const weightBars = weights
       .filter((w) => w.symbol !== "CASH")
-      .map((w) => ({ x: w.symbol, y: Math.round(w.weight * 10000) / 100 })); // %
+      .map((w) => ({ x: w.symbol, y: Math.round(w.weight * 10000) / 100 }));
+
     const pnlBars = weights
       .filter((w) => w.symbol !== "CASH")
       .map((w) => ({ x: w.symbol, y: w.pnl }));
 
-    const allocPie = Object.entries(allocMap).map(([k, w]) => ({
-      x: k,
-      y: Math.round(w * 10000) / 100,
-    })) || [{ x: "Unclassified", y: 100 }]; // %
+    const allocPie =
+      Object.entries(allocMap).map(([k, w]) => ({
+        x: k,
+        y: Math.round(w * 10000) / 100,
+      })) || [{ x: "Unclassified", y: 100 }];
 
-    // SPY stats + series
     const spyDD = drawdownSeries(spy);
     const spyVol = rollingVol(spy, 30);
     const benchYtd = spy.length > 1 ? (spy.at(-1)! / spy[0] - 1) * 100 : 0;
@@ -325,15 +285,13 @@ export default function Investments(): React.ReactElement {
     };
   }, [holdings, spy]);
 
-  // ---------- UI ----------
+  /* ===== UI ===== */
   return (
     <ScrollView
       style={[s.root, { paddingTop: insets.top + 6 }]}
       contentContainerStyle={{ padding: 16, paddingBottom: 140, gap: 12 }}
       showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
       {/* Snapshot */}
       <Animated.View entering={FadeInUp.duration(320)}>
@@ -346,23 +304,13 @@ export default function Investments(): React.ReactElement {
             </View>
             <View style={s.kpi}>
               <Text style={s.kpiLabel}>Day P/L</Text>
-              <Text
-                style={[
-                  s.kpiValue,
-                  { color: derived.dayPL >= 0 ? "#16a34a" : "#ef4444" },
-                ]}
-              >
+              <Text style={[s.kpiValue, { color: derived.dayPL >= 0 ? "#16a34a" : "#ef4444" }]}>
                 {money(derived.dayPL)}
               </Text>
             </View>
             <View style={s.kpi}>
               <Text style={s.kpiLabel}>Total P/L</Text>
-              <Text
-                style={[
-                  s.kpiValue,
-                  { color: derived.totalPL >= 0 ? "#16a34a" : "#ef4444" },
-                ]}
-              >
+              <Text style={[s.kpiValue, { color: derived.totalPL >= 0 ? "#16a34a" : "#ef4444" }]}>
                 {money(derived.totalPL)}
               </Text>
             </View>
@@ -370,29 +318,26 @@ export default function Investments(): React.ReactElement {
           <View style={[s.kpiRow, { marginTop: 8 }]}>
             <View style={s.kpi}>
               <Text style={s.kpiLabel}>Benchmark (SPY YTD)</Text>
-              <Text
-                style={[
-                  s.kpiValue,
-                  { color: derived.benchYtd >= 0 ? "#16a34a" : "#ef4444" },
-                ]}
-              >
+              <Text style={[s.kpiValue, { color: derived.benchYtd >= 0 ? "#16a34a" : "#ef4444" }]}>
                 {pct(derived.benchYtd)}
               </Text>
             </View>
             <View style={s.kpi}>
               <Text style={s.kpiLabel}>Top Weight</Text>
-              <Text style={s.kpiValue}>
-                {nf.format((derived.topWeight || 0) * 100)}%
-              </Text>
+              <Text style={s.kpiValue}>{nf.format((derived.topWeight || 0) * 100)}%</Text>
             </View>
           </View>
           {derived.topWeight > 0.2 && (
             <View style={s.notice}>
               <Text style={s.noticeText}>
-                Risk: top position {Math.round(derived.topWeight * 100)}% of
-                portfolio.
+                Risk: top position {Math.round(derived.topWeight * 100)}% of portfolio.
               </Text>
             </View>
+          )}
+          {err && err.includes("403") && (
+            <Text style={{ color: "#ef4444", marginTop: 8 }}>
+              Live candles blocked earlier. Proxy + fallback active.
+            </Text>
           )}
         </Card>
       </Animated.View>
@@ -411,23 +356,9 @@ export default function Investments(): React.ReactElement {
                   padAngle={2}
                   labelRadius={h / 2 - 18}
                   animate={{ duration: 800 }}
-                  data={
-                    derived.allocPie.length
-                      ? derived.allocPie
-                      : [{ x: "Unclassified", y: 100 }]
-                  }
-                  colorScale={[
-                    "#246BFD",
-                    "#5b76f7",
-                    "#9db7ff",
-                    "#111827",
-                    "#a78bfa",
-                    "#f59e0b",
-                    "#10b981",
-                  ]}
-                  labels={({ datum }: any) =>
-                    `${datum.x}\n${nf.format(datum.y)}%`
-                  }
+                  data={derived.allocPie.length ? derived.allocPie : [{ x: "Unclassified", y: 100 }]}
+                  colorScale={["#246BFD", "#5b76f7", "#9db7ff", "#111827", "#a78bfa", "#f59e0b", "#10b981"]}
+                  labels={({ datum }: any) => `${datum.x}\n${nf.format(datum.y)}%`}
                   style={{ labels: { fontSize: 10, fill: "#111827" } }}
                 />
               )}
@@ -453,18 +384,11 @@ export default function Investments(): React.ReactElement {
                   <VictoryAxis
                     dependentAxis
                     tickFormat={(t: number) => `${t}%`}
-                    style={{
-                      grid: { stroke: "#EEF2F7" },
-                      tickLabels: { fontSize: 9 },
-                    }}
+                    style={{ grid: { stroke: "#EEF2F7" }, tickLabels: { fontSize: 9 } }}
                   />
                   <VictoryAxis style={{ tickLabels: { fontSize: 9 } }} />
                   <VictoryBar
-                    data={
-                      derived.weightBars.length
-                        ? derived.weightBars
-                        : [{ x: "N/A", y: 0 }]
-                    }
+                    data={derived.weightBars.length ? derived.weightBars : [{ x: "N/A", y: 0 }]}
                     style={{ data: { fill: "#246BFD" } }}
                     barRatio={0.6}
                   />
@@ -492,22 +416,13 @@ export default function Investments(): React.ReactElement {
                   <VictoryAxis
                     dependentAxis
                     tickFormat={(t: number) => money(t)}
-                    style={{
-                      grid: { stroke: "#EEF2F7" },
-                      tickLabels: { fontSize: 9 },
-                    }}
+                    style={{ grid: { stroke: "#EEF2F7" }, tickLabels: { fontSize: 9 } }}
                   />
                   <VictoryAxis style={{ tickLabels: { fontSize: 9 } }} />
                   <VictoryBar
-                    data={
-                      derived.pnlBars.length
-                        ? derived.pnlBars
-                        : [{ x: "N/A", y: 0 }]
-                    }
+                    data={derived.pnlBars.length ? derived.pnlBars : [{ x: "N/A", y: 0 }]}
                     style={{
-                      data: ({ datum }: any) => ({
-                        fill: datum.y >= 0 ? "#16a34a" : "#ef4444",
-                      }),
+                      data: ({ datum }: any) => ({ fill: datum.y >= 0 ? "#16a34a" : "#ef4444" }),
                     }}
                     barRatio={0.6}
                   />
@@ -535,10 +450,7 @@ export default function Investments(): React.ReactElement {
                   <VictoryAxis
                     dependentAxis
                     tickFormat={(t: number) => `${t}%`}
-                    style={{
-                      grid: { stroke: "#EEF2F7" },
-                      tickLabels: { fontSize: 9 },
-                    }}
+                    style={{ grid: { stroke: "#EEF2F7" }, tickLabels: { fontSize: 9 } }}
                   />
                   <VictoryAxis style={{ tickLabels: { fontSize: 9 } }} />
                   <VictoryLine
@@ -576,10 +488,7 @@ export default function Investments(): React.ReactElement {
                   <VictoryAxis
                     dependentAxis
                     tickFormat={(t: number) => `${nf.format(t)}%`}
-                    style={{
-                      grid: { stroke: "#EEF2F7" },
-                      tickLabels: { fontSize: 9 },
-                    }}
+                    style={{ grid: { stroke: "#EEF2F7" }, tickLabels: { fontSize: 9 } }}
                   />
                   <VictoryAxis style={{ tickLabels: { fontSize: 9 } }} />
                   <VictoryArea
@@ -634,19 +543,12 @@ export default function Investments(): React.ReactElement {
                           width={w}
                           height={h}
                           padding={{ left: 8, right: 8, top: 8, bottom: 8 }}
-                          containerComponent={
-                            <VictoryContainer responsive={false} />
-                          }
+                          containerComponent={<VictoryContainer responsive={false} />}
                           animate={{ duration: 600 }}
                         >
                           <VictoryLine
-                            data={p.data.map((y: number, i: number) => ({
-                              x: i + 1,
-                              y,
-                            }))}
-                            style={{
-                              data: { stroke: "#5b76f7", strokeWidth: 1.3 },
-                            }}
+                            data={p.data.map((y: number, i: number) => ({ x: i + 1, y }))}
+                            style={{ data: { stroke: "#5b76f7", strokeWidth: 1.3 } }}
                           />
                         </VictoryChart>
                       )}
@@ -687,16 +589,10 @@ export default function Investments(): React.ReactElement {
                         {h.name ? ` · ${h.name}` : ""}
                       </Text>
                       <Text style={{ color: "#6B7280", marginTop: 2 }}>
-                        Qty {h.quantity} @ {money(h.avg_price)} · Value{" "}
-                        {money(value)}
+                        Qty {h.quantity} @ {money(h.avg_price)} · Value {money(value)}
                       </Text>
                     </View>
-                    <Text
-                      style={{
-                        fontWeight: "800",
-                        color: pnl >= 0 ? "#16a34a" : "#ef4444",
-                      }}
-                    >
+                    <Text style={{ fontWeight: "800", color: pnl >= 0 ? "#16a34a" : "#ef4444" }}>
                       {money(pnl)}
                     </Text>
                   </View>
@@ -724,17 +620,11 @@ export default function Investments(): React.ReactElement {
                   <VictoryAxis
                     dependentAxis
                     tickFormat={(t: number) => money(t)}
-                    style={{
-                      grid: { stroke: "#EEF2F7" },
-                      tickLabels: { fontSize: 9 },
-                    }}
+                    style={{ grid: { stroke: "#EEF2F7" }, tickLabels: { fontSize: 9 } }}
                   />
                   <VictoryAxis style={{ tickLabels: { fontSize: 9 } }} />
                   <VictoryBar
-                    data={MOCK_DIVIDENDS.map((d) => ({
-                      x: d.date.slice(5),
-                      y: d.amount,
-                    }))}
+                    data={MOCK_DIVIDENDS.map((d) => ({ x: d.date.slice(5), y: d.amount }))}
                     style={{ data: { fill: "#246BFD" } }}
                     barRatio={0.6}
                   />
@@ -745,7 +635,7 @@ export default function Investments(): React.ReactElement {
         </Animated.View>
       )}
 
-      {/* DCA cumulative invested */}
+      {/* DCA cumulative */}
       {ChartsReady && (
         <Animated.View entering={FadeInUp.delay(360).duration(360)}>
           <Card>
@@ -769,10 +659,7 @@ export default function Investments(): React.ReactElement {
                     <VictoryAxis
                       dependentAxis
                       tickFormat={(t: number) => money(t)}
-                      style={{
-                        grid: { stroke: "#EEF2F7" },
-                        tickLabels: { fontSize: 9 },
-                      }}
+                      style={{ grid: { stroke: "#EEF2F7" }, tickLabels: { fontSize: 9 } }}
                     />
                     <VictoryAxis style={{ tickLabels: { fontSize: 9 } }} />
                     <VictoryArea
@@ -814,7 +701,6 @@ const s = StyleSheet.create({
   kpi: { flex: 1, backgroundColor: "#fff", borderRadius: 12, padding: 10 },
   kpiLabel: { fontSize: 12, color: "#6B7280", fontWeight: "700" },
   kpiValue: { fontSize: 16, fontWeight: "800", marginTop: 2 },
-  blockNote: { color: "#6B7280", marginTop: 8 },
   notice: {
     marginTop: 10,
     backgroundColor: "#FFF7ED",
