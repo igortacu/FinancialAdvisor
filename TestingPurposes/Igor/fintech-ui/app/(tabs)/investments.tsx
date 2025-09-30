@@ -105,20 +105,23 @@ function rollingVol(values: number[], window = 30): Point[] {
 }
 
 /* ================== Market-data proxy ================== */
-function proxy(path: string, qs: string) {
+/* ================== Market-data proxy ================== */
+function proxy(params: Record<string, string>) {
   const base = `${SUPABASE_URL}/functions/v1/finnhub-proxy`;
-  const url = `${base}?path=${encodeURIComponent(path)}&qs=${encodeURIComponent(qs)}`;
-  return fetch(url);
+  const qs = new URLSearchParams(params).toString();
+  const url = `${base}?${qs}`;
+  return fetch(url, { cache: "no-store", referrerPolicy: "no-referrer" });
 }
 
 async function fetchQuote(symbol: string): Promise<number | null> {
   try {
-    const r = await proxy("quote", `symbol=${encodeURIComponent(symbol)}`);
+    const r = await proxy({ source: "finnhub", path: "quote", qs: `symbol=${encodeURIComponent(symbol)}` });
     if (!r.ok) throw new Error(`Quote ${r.status}`);
     const j = await r.json();
     const price = Number(j?.c);
     return Number.isFinite(price) && price > 0 ? price : null;
-  } catch {
+  } catch (e) {
+    console.error("fetchQuote error", e);
     return null;
   }
 }
@@ -128,8 +131,7 @@ async function fetchQuotes(symbols: string[]): Promise<Record<string, number>> {
   for (const s of symbols) {
     const p = await fetchQuote(s);
     if (p != null) out[s] = p;
-    // throttle a bit
-    await new Promise((res) => setTimeout(res, 120));
+    await new Promise((res) => setTimeout(res, 120)); // throttle a bit
   }
   return out;
 }
@@ -137,33 +139,36 @@ async function fetchQuotes(symbols: string[]): Promise<Record<string, number>> {
 async function fetchCandles(symbol = "SPY"): Promise<number[]> {
   try {
     const to = Math.floor(Date.now() / 1000) - 60;
-    const from = to - 220 * 86400; // ~7 months
+    const from = to - 220 * 86400;
     const qs = `symbol=${encodeURIComponent(symbol)}&resolution=D&from=${from}&to=${to}`;
-    const r = await proxy("stock/candle", qs);
+    const r = await proxy({ source: "finnhub", path: "stock/candle", qs });
     if (!r.ok) throw new Error(`Candle ${r.status}`);
     const j = await r.json();
     if (j?.s !== "ok" || !Array.isArray(j?.c)) return [];
     return j.c.map((v: unknown) => Number(v)).filter(Number.isFinite);
-  } catch {
+  } catch (e) {
+    console.error("fetchCandles error", e);
     return [];
   }
 }
 
-// CSV fallback for SPY from Stooq (no key)
+// Fallback via server (no browser CORS)
 async function fetchCandlesFallback(symbol = "SPY"): Promise<number[]> {
   try {
-    const map: Record<string, string> = { SPY: "spy.us" };
-    const code = map[symbol] ?? `${symbol.toLowerCase()}.us`;
-    const r = await fetch(`https://stooq.com/q/d/l/?s=${code}&i=d`);
-    if (!r.ok) return [];
+    const codeMap: Record<string, string> = { SPY: "spy.us" };
+    const code = codeMap[symbol] ?? `${symbol.toLowerCase()}.us`;
+    const r = await proxy({ source: "stooq", code });
+    if (!r.ok) throw new Error(`Stooq ${r.status}`);
     const csv = await r.text();
     const lines = csv.trim().split("\n").slice(1);
     const closes = lines.map((l) => Number(l.split(",")[4])).filter(Number.isFinite);
     return closes.slice(-220);
-  } catch {
+  } catch (e) {
+    console.error("fetchCandlesFallback error", e);
     return [];
   }
 }
+
 
 /* ================== Screen ================== */
 export default function Investments(): React.ReactElement {

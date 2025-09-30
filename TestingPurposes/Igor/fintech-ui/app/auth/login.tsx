@@ -16,14 +16,15 @@ import {
 import { supabase } from "../../api";
 import * as WebBrowser from "expo-web-browser";
 import * as Google from "expo-auth-session/providers/google";
+import * as AuthSession from "expo-auth-session";
 import { router } from "expo-router";
 import { useAuth } from "@/store/auth";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import Animated, { FadeInUp, FadeInDown, FadeOutDown } from "react-native-reanimated";
+import Animated, { FadeInUp, FadeOutDown } from "react-native-reanimated";
 
-// Types
 type Screen = "welcome" | "register" | "login";
+
 WebBrowser.maybeCompleteAuthSession();
 
 export default function AuthScreen(): React.ReactElement {
@@ -38,10 +39,15 @@ export default function AuthScreen(): React.ReactElement {
   const [secure, setSecure] = useState(true);
   const [userInfo, setUserInfo] = useState<any>(null);
 
-  // responsive scale: keeps layout inside viewport on small phones
   const { height, width } = useWindowDimensions();
-  const hScale = Math.min(height / 800, 1); // caps at 1
-  const wScale = Math.max(Math.min(width / 390, 1), 0.85); // iPhone 14 width baseline
+  const hScale = Math.min(height / 800, 1);
+  const wScale = Math.max(Math.min(width / 390, 1), 0.85);
+
+  // ---- Redirects (no 'useProxy' to satisfy TS) ----
+  const redirectUri =
+    Platform.OS === "web"
+      ? window.location.origin // add this origin to Google OAuth "Authorized redirect URIs"
+      : AuthSession.makeRedirectUri(); // default scheme for native
 
   const [request, response, promptAsync] = Google.useAuthRequest({
     androidClientId:
@@ -51,6 +57,9 @@ export default function AuthScreen(): React.ReactElement {
     webClientId:
       "929357446480-gf7bks19r5o9nu4jau4s4p43vtohve6f.apps.googleusercontent.com",
     scopes: ["openid", "profile", "email"],
+    responseType: AuthSession.ResponseType.Token,
+    redirectUri,
+    extraParams: { prompt: "select_account" },
   });
 
   const title = useMemo(() => {
@@ -94,29 +103,15 @@ export default function AuthScreen(): React.ReactElement {
     }
   };
 
-  async function saveUserToSupabase(userInfo: any) {
-    if (!userInfo?.email) return;
-
-    const { data: existingUser, error: selectError } = await supabase
+  async function saveUserToSupabase(user: any) {
+    if (!user?.email) return;
+    const { error } = await supabase
       .from("users")
-      .select("*")
-      .eq("email", userInfo.email)
-      .single();
-
-    if (selectError && selectError.code !== "PGRST116") {
-      console.error(selectError);
-      return;
-    }
-
-    if (!existingUser) {
-      const { error: insertError } = await supabase.from("users").insert([
-        {
-          email: userInfo.email,
-          name: userInfo.name,
-        },
-      ]);
-      if (insertError) console.error("Error saving user:", insertError);
-    }
+      .upsert([{ email: user.email, name: user.name }], {
+        onConflict: "email",
+        ignoreDuplicates: false,
+      });
+    if (error) console.error("Error saving user:", error);
   }
 
   const handleRegister = async () => {
@@ -182,7 +177,10 @@ export default function AuthScreen(): React.ReactElement {
       router.replace("/cont");
     } catch (error: any) {
       const msg = String(error?.message ?? "Login failed");
-      Alert.alert("Login Failed", msg.includes("Invalid login credentials") ? "Invalid email or password." : msg);
+      Alert.alert(
+        "Login Failed",
+        msg.includes("Invalid login credentials") ? "Invalid email or password." : msg
+      );
     } finally {
       setIsLoading(false);
     }
@@ -190,10 +188,10 @@ export default function AuthScreen(): React.ReactElement {
 
   const onGooglePress = () => {
     if (!request) return;
+    // no 'useProxy' here; types stay happy
     promptAsync();
   };
 
-  // derived style values (scale-aware)
   const dyn = {
     titleFs: Math.round(36 * wScale),
     subFs: Math.round(16 * wScale),
@@ -213,18 +211,15 @@ export default function AuthScreen(): React.ReactElement {
         style={styles.screen}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* Back */}
         {screen !== "welcome" && (
           <TouchableOpacity style={styles.backButton} onPress={() => setScreen("welcome")}>
-            <Text style={{ position: "absolute", left: 20, top: 1, color: "#90a3ecff", fontSize: 30 }}>
+            <Text style={{ position: "absolute", left: 20, top: 1, color: "#90a3ec", fontSize: 30 }}>
               {"<"}
             </Text>
           </TouchableOpacity>
         )}
 
-        {/* Content wrapper – fills screen, no scroll */}
-        <View style={styles.root(dyn)}>
-          {/* Hero */}
+        <View style={createRootStyle(dyn)}>
           <Animated.View entering={FadeInUp.duration(400)}>
             <View style={styles.heroWrap}>
               <LinearGradient
@@ -233,7 +228,7 @@ export default function AuthScreen(): React.ReactElement {
                 end={{ x: 1, y: 1 }}
                 style={styles.heroBadge}
               >
-                <Ionicons name="shield-checkmark" size={18} color="#f0f3ffff" />
+                <Ionicons name="shield-checkmark" size={18} color="#f0f3ff" />
                 <Text style={styles.heroBadgeText}>Secure & Private</Text>
               </LinearGradient>
 
@@ -246,7 +241,6 @@ export default function AuthScreen(): React.ReactElement {
             </View>
           </Animated.View>
 
-          {/* Body – switches per screen */}
           <View style={styles.body}>
             {screen === "welcome" && (
               <Animated.View entering={FadeInUp.duration(300)} exiting={FadeOutDown.duration(250)}>
@@ -275,7 +269,7 @@ export default function AuthScreen(): React.ReactElement {
                     inputHeight={dyn.inputH}
                   />
                   <Input
-                    icon="id-card-outline"
+                    icon="person-outline"
                     placeholder="Surname (optional)"
                     value={surname}
                     onChangeText={setSurname}
@@ -299,7 +293,7 @@ export default function AuthScreen(): React.ReactElement {
                     value={password}
                     onChangeText={setPassword}
                     autoCapitalize="none"
-                    secureTextEntry
+                    secureTextEntry={secure}
                     rightIcon={secure ? "eye-outline" : "eye-off-outline"}
                     onRightIconPress={() => setSecure((v) => !v)}
                     textContentType="password"
@@ -396,7 +390,7 @@ export default function AuthScreen(): React.ReactElement {
   );
 }
 
-// ------- UI Subcomponents -------
+/* ---------- UI Subcomponents ---------- */
 
 type InputProps = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -450,7 +444,7 @@ function Input(props: InputProps) {
   );
 }
 
-// ------- Styles -------
+/* ---------- Styles ---------- */
 
 const styles = StyleSheet.create({
   screen: {
@@ -458,16 +452,6 @@ const styles = StyleSheet.create({
     width: "100%",
     backgroundColor: "transparent",
   },
-
-  // fills the viewport height, uses gaps that scale down on small screens
-  root: (dyn: { heroTopPad: number; sectionGap: number; blockPadV: number }) => ({
-    flex: 1,
-    paddingTop: dyn.heroTopPad,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    gap: dyn.sectionGap,
-    justifyContent: "space-between", // forces content to fit without scroll
-  }),
 
   heroWrap: {
     alignItems: "center",
@@ -497,9 +481,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  body: {
-    // the form area
-  },
+  body: {},
 
   container: {
     alignItems: "center",
@@ -531,7 +513,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   btnPrimary: {
-    backgroundColor: "#3b6df6ff",
+    backgroundColor: "#3b6df6",
     shadowColor: "#3b82f6",
     shadowOpacity: 0.3,
     shadowRadius: 10,
@@ -579,7 +561,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#e2e8f0",
   },
   dividerText: {
-    color: "#ffffffff",
+    color: "#ffffff",
     fontSize: 14,
   },
 
@@ -600,7 +582,19 @@ const styles = StyleSheet.create({
   smallText: {
     paddingTop: 10,
     fontSize: 15,
-    color: "#dae2f0ff",
+    color: "#dae2f0",
     textAlign: "center",
   },
 });
+
+// dynamic container style
+function createRootStyle(dyn: { heroTopPad: number; sectionGap: number; blockPadV: number }) {
+  return {
+    flex: 1,
+    paddingTop: dyn.heroTopPad,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    gap: dyn.sectionGap,
+    justifyContent: "space-between" as const,
+  };
+}

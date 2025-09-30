@@ -1,4 +1,3 @@
-// supabase/functions/finnhub-proxy/index.ts
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const FINNHUB = Deno.env.get("FINNHUB_TOKEN") ?? "";
