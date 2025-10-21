@@ -65,6 +65,19 @@ const fallbackCash7d = [
   { x: 6, y: 1250 },
   { x: 7, y: 1600 },
 ];
+// 30/90 day simple forecast
+const forecastData = [
+  { x: 0, y: 1600 }, 
+  { x: 30, y: 2100 }, 
+  { x: 90, y: 2900 }, 
+];
+
+// Confidence band (e.g. ±15%)
+const confidenceBand = forecastData.map((d) => ({
+  x: d.x,
+  y0: d.y * 0.85, 
+  y: d.y * 1.15, 
+}));
 
 const received7dList = [
   { amount: 2850, description: "Victoria Bank", category: "Salary" },
@@ -659,6 +672,72 @@ export default function Analytics() {
               )}
             </Card>
           </Animated.View>
+          {/* Simple Cash Flow Forecast (30/90 days) */}
+<Animated.View entering={FadeInUp.delay(320).duration(420)}>
+  <Card>
+    <Text style={s.h1}>Cash Flow Forecast (30 / 90 Days)</Text>
+    <Text style={{ fontWeight: "600", color: "#6B7280", marginBottom: 8 }}>
+      Based on recurring inflows/outflows
+    </Text>
+
+    <CompactChart height={200}>
+      {(w, h) => (
+        <VictoryChart
+          width={w}
+          height={h}
+          padding={{ left: 60, right: 20, top: 20, bottom: 40 }}
+          containerComponent={<VictoryContainer responsive={false} />}
+          animate={{ duration: 700 }}
+        >
+          <VictoryAxis
+            label="Days"
+            style={{
+              axisLabel: { padding: 35, fontSize: 12, fill: "#6B7280" },
+              tickLabels: { fontSize: 10, fill: "#6B7280" },
+            }}
+          />
+          <VictoryAxis
+            dependentAxis
+            tickFormat={(t:any) => `${(t / 1000).toFixed(1)}k`}
+            style={{
+              grid: { stroke: "#EEF2F7" },
+              tickLabels: { fontSize: 10, fill: "#6B7280" },
+            }}
+          />
+
+          {/* Confidence Band */}
+          <VictoryArea
+            data={confidenceBand}
+            x="x"
+            y="y"
+            y0={(d: any) => d.y0}
+            style={{
+              data: { fill: "#cfe3ff", fillOpacity: 0.4, stroke: "none" },
+            }}
+          />
+
+          {/* Forecast Line */}
+          <VictoryLine
+            data={forecastData}
+            style={{
+              data: { stroke: "#246BFD", strokeWidth: 3 },
+            }}
+          />
+
+          {/* Dots */}
+          <VictoryGroup data={forecastData}>
+            <VictoryBar
+              style={{ data: { fill: "#246BFD" } }}
+              barWidth={3}
+              alignment="middle"
+            />
+          </VictoryGroup>
+        </VictoryChart>
+      )}
+    </CompactChart>
+  </Card>
+</Animated.View>
+
         </>
       )}
     </ScrollView>
