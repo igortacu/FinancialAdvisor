@@ -13,7 +13,7 @@ import { router } from "expo-router";
 import { supabase } from "@/api";
 import { useAuth } from "@/store/auth";
 import { getRedirectTo } from "@/lib/authRedirect";
-import { upsertProfile } from "@/lib/profile";
+import { upsertProfile, getProfile } from "@/lib/profile";
 
 type Screen = "welcome" | "register" | "login";
 
@@ -47,11 +47,16 @@ export default function AuthScreen(): React.ReactElement {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Store/update profile in database (OAuth provides name in metadata)
       await upsertProfile();
+      
+      // Fetch profile from database
+      const profile = await getProfile(user.id);
+
       setUser({
         id: user.id,
         email: user.email ?? "",
-        name: user.user_metadata?.name ?? null,
+        name: profile?.name ?? user.user_metadata?.name ?? null,
         avatarUrl: user.user_metadata?.avatar_url ?? null,
       });
       router.replace("/(tabs)");
@@ -74,22 +79,102 @@ export default function AuthScreen(): React.ReactElement {
 
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signUp({ email: e, password: p });
-      if (error) throw error;
-
-      await upsertProfile();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUser({
-          id: user.id,
-          email: user.email ?? e,
-          name: (name.trim() || [name.trim(), surname.trim()].filter(Boolean).join(" ")) || null,
-          avatarUrl: user.user_metadata?.avatar_url ?? null,
-        });
+      // Combine name and surname into single name field
+      const fullName = [name.trim(), surname.trim()].filter(Boolean).join(" ") || null;
+      
+      console.log("🔵 Starting registration for:", e);
+      
+      // Sign up with metadata
+      const { data, error } = await supabase.auth.signUp({ 
+        email: e, 
+        password: p,
+        options: {
+          emailRedirectTo: redirectTo,
+          data: {
+            name: fullName,
+          }
+        }
+      });
+      
+      console.log("🔵 Signup response:", JSON.stringify({ 
+        hasUser: !!data.user, 
+        hasSession: !!data.session,
+        userId: data.user?.id,
+        identities: data.user?.identities?.length,
+        error: error 
+      }, null, 2));
+      
+      if (error) {
+        console.error("❌ Signup error:", error);
+        // Handle specific error cases
+        if (error.message.includes("already registered") || error.message.includes("already been registered")) {
+          throw new Error("This email is already registered. Please login instead.");
+        }
+        throw error;
       }
-      router.replace("/(tabs)");
+
+      // Check if user already exists (Supabase returns user but with empty identities array)
+      if (data.user && data.session && data.user.identities && data.user.identities.length === 0) {
+        console.log("⚠️  User already exists");
+        Alert.alert(
+          "Account Exists",
+          "An account with this email already exists. Please login instead.",
+          [{ text: "Go to Login", onPress: () => setScreen("login") }]
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      // Check if email confirmation is required
+      if (data.user && !data.session) {
+        console.log("📧 Email confirmation required for:", data.user.id);
+        console.log("ℹ️  Profile will be created after email confirmation on first login");
+        
+        // Note: We cannot create the profile here due to RLS (Row Level Security)
+        // The profile will be created automatically during the first login
+        // after the user confirms their email and gets a valid session
+        
+        Alert.alert(
+          "Check Your Email", 
+          "We've sent you a confirmation email. Please verify your email address, then login to continue.",
+          [{ text: "OK", onPress: () => {
+            setScreen("login");
+            setEmail("");
+            setPassword("");
+            setName("");
+            setSurname("");
+          }}]
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      // If we have a session, user is automatically logged in
+      if (data.user && data.session) {
+        console.log("✅ User registered and logged in:", data.user.id);
+        
+        // Store profile in profiles table
+        await upsertProfile(fullName || undefined);
+        console.log("✅ Profile stored");
+        
+        setUser({
+          id: data.user.id,
+          email: data.user.email ?? e,
+          name: fullName,
+          avatarUrl: data.user.user_metadata?.avatar_url ?? null,
+        });
+        
+        setEmail("");
+        setPassword("");
+        setName("");
+        setSurname("");
+        
+        router.replace("/(tabs)");
+      }
     } catch (err: any) {
-      Alert.alert("Registration Failed", String(err?.message ?? "Unknown error"));
+      console.error("❌ Registration error:", err);
+      const errorMessage = err?.message ?? "Unknown error";
+      Alert.alert("Registration Failed", errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -102,22 +187,73 @@ export default function AuthScreen(): React.ReactElement {
 
     setIsLoading(true);
     try {
+      console.log("🔵 Attempting login for:", e);
+      
       const { data, error } = await supabase.auth.signInWithPassword({ email: e, password: p });
-      if (error) throw error;
+      
+      console.log("🔵 Login response:", JSON.stringify({
+        hasUser: !!data.user,
+        hasSession: !!data.session,
+        userId: data.user?.id,
+        emailConfirmed: data.user?.email_confirmed_at,
+        error: error
+      }, null, 2));
+      
+      if (error) {
+        console.error("❌ Login error:", error);
+        throw error;
+      }
 
-      await upsertProfile();
+      if (!data.user || !data.session) {
+        throw new Error("Login failed - no user or session returned");
+      }
+
+      console.log("✅ Login successful for:", data.user.id);
+
+      // Fetch profile from database
+      let profile = await getProfile(data.user.id);
+      console.log("🔵 Profile fetched:", profile);
+      
+      // If profile doesn't exist, create it from user metadata
+      if (!profile) {
+        console.log("🔵 Profile not found, creating from metadata");
+        const userName = data.user.user_metadata?.name ?? null;
+        console.log("🔵 User metadata name:", userName);
+        
+        // Create profile with name from metadata
+        await upsertProfile(userName ?? undefined);
+        
+        // Fetch the newly created profile
+        profile = await getProfile(data.user.id);
+        console.log("✅ Profile created:", profile);
+      } else {
+        console.log("✅ Profile exists");
+      }
+      
       setUser({
-        id: data.user!.id,
-        email: data.user?.email ?? e,
-        name: data.user?.user_metadata?.name ?? null,
-        avatarUrl: data.user?.user_metadata?.avatar_url ?? null,
+        id: data.user.id,
+        email: data.user.email ?? e,
+        name: profile?.name ?? data.user.user_metadata?.name ?? null,
+        avatarUrl: data.user.user_metadata?.avatar_url ?? null,
       });
+      
+      console.log("✅ User state updated, redirecting to app");
+      
       setEmail("");
       setPassword("");
       router.replace("/(tabs)");
     } catch (err: any) {
+      console.error("❌ Login error:", err);
       const msg = String(err?.message ?? "Login failed");
-      Alert.alert("Login Failed", msg.includes("Invalid login credentials") ? "Invalid email or password." : msg);
+      let errorMessage = msg;
+      
+      if (msg.includes("Invalid login credentials")) {
+        errorMessage = "Invalid email or password.";
+      } else if (msg.includes("Email not confirmed")) {
+        errorMessage = "Please confirm your email before logging in.";
+      }
+      
+      Alert.alert("Login Failed", errorMessage);
     } finally {
       setIsLoading(false);
     }
