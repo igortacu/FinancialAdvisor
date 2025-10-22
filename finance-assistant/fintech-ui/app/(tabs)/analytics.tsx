@@ -9,10 +9,9 @@ import {
   ActivityIndicator,
   Modal,
   TouchableWithoutFeedback,
-  UIManager,
-  findNodeHandle,
   Platform,
   Dimensions,
+  UIManager, // Added UIManager import
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInUp } from "react-native-reanimated";
@@ -27,7 +26,9 @@ import {
   VictoryArea,
   VictoryLine,
   VictoryContainer,
+  VictoryScatter,
   ChartsReady,
+  VictoryLabel,
 } from "../../lib/charts";
 
 // ---------- helpers ----------
@@ -65,18 +66,38 @@ const fallbackCash7d = [
   { x: 6, y: 1250 },
   { x: 7, y: 1600 },
 ];
-// 30/90 day simple forecast
-const forecastData = [
-  { x: 0, y: 1600 }, 
-  { x: 30, y: 2100 }, 
-  { x: 90, y: 2900 }, 
+
+// 30-day forecast (weekly data points)
+const forecast30d = [
+  { day: 0, y: 1600 },
+  { day: 7, y: 1750 },
+  { day: 14, y: 1900 },
+  { day: 21, y: 2000 },
+  { day: 30, y: 2100 },
 ];
 
-// Confidence band (e.g. ±15%)
-const confidenceBand = forecastData.map((d) => ({
-  x: d.x,
-  y0: d.y * 0.85, 
-  y: d.y * 1.15, 
+// 90-day forecast (bi-weekly data points)
+const forecast90d = [
+  { day: 0, y: 1600 },
+  { day: 15, y: 1800 },
+  { day: 30, y: 2100 },
+  { day: 45, y: 2350 },
+  { day: 60, y: 2550 },
+  { day: 75, y: 2700 },
+  { day: 90, y: 2900 },
+];
+
+// Generate confidence bands (±15%)
+const confidence30d = forecast30d.map((d) => ({
+  day: d.day,
+  y0: d.y * 0.85,
+  y: d.y * 1.15,
+}));
+
+const confidence90d = forecast90d.map((d) => ({
+  day: d.day,
+  y0: d.y * 0.85,
+  y: d.y * 1.15,
 }));
 
 const received7dList = [
@@ -197,7 +218,7 @@ function MonthDropdown({
   buttonTextStyle: any;
 }) {
   // View on native; HTMLElement on web
-  const btnRef = React.useRef<View | HTMLElement | null>(null);
+  const btnRef = React.useRef<View | null>(null);
   const [open, setOpen] = React.useState(false);
   const [pos, setPos] = React.useState<{ top: number; left: number; width: number }>(
     { top: 0, left: 0, width: 180 }
@@ -208,13 +229,10 @@ function MonthDropdown({
 
     if (Platform.OS === "web") {
       // Try to get the DOM node and read its rect
-      const el =
-        (btnRef.current as any) ??
-        // some RNW components expose _node
-        ((btnRef.current as any)?._node as HTMLElement | undefined);
-
-      if (el && typeof (el as any).getBoundingClientRect === "function") {
-        const r = (el as any).getBoundingClientRect();
+      const el = btnRef.current as any;
+      
+      if (el && typeof el.getBoundingClientRect === "function") {
+        const r = el.getBoundingClientRect();
         const screenW = window.innerWidth;
         const left = Math.min(
           Math.max(r.left + r.width - menuW + window.scrollX, 12),
@@ -227,9 +245,7 @@ function MonthDropdown({
     }
 
     // Native (iOS/Android)
-    // Only call findNodeHandle on native
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { UIManager, findNodeHandle } = require("react-native");
+    const { findNodeHandle } = require("react-native");
     const node = findNodeHandle(btnRef.current);
     if (node && UIManager?.measureInWindow) {
       UIManager.measureInWindow(node, (x: number, y: number, w: number) => {
@@ -248,7 +264,7 @@ function MonthDropdown({
   return (
     <>
       {/* On web, the ref will become an HTMLElement; on native, a View */}
-      <Pressable ref={btnRef as any} style={buttonStyle} onPress={openMenu}>
+      <Pressable ref={btnRef} style={buttonStyle} onPress={openMenu}>
         <Text style={buttonTextStyle}>{value === "All" ? "All Months" : value}</Text>
         <Text style={{ fontSize: 12, color: "#6B7280", marginLeft: 8, fontWeight: "600" }}>
           {open ? "▲" : "▼"}
@@ -338,6 +354,9 @@ export default function Analytics() {
   // month selector
   const [selectedMonth, setSelectedMonth] = React.useState<string>("All");
 
+  // forecast period selector
+  const [forecastPeriod, setForecastPeriod] = React.useState<"30" | "90">("30");
+
   // cash flow
   const [cashSeries] = React.useState(fallbackCash7d);
   const [received7d] = React.useState(3810);
@@ -363,7 +382,13 @@ export default function Analytics() {
       ],
     };
   }, [spentNeeds, spentWants, spentSavings]);
-
+ 
+  const forecastData = forecastPeriod === "30" ? forecast30d : forecast90d;
+  const confData = forecastPeriod === "30" ? confidence30d : confidence90d;
+  const xMax = Math.max(...forecastData.map((p) => p.day));
+  const rawYMax = Math.max(...forecastData.map((p) => p.y));
+  const yMax = Math.ceil((rawYMax * 1.15) / 100) * 100 || 2500;
+  
   return (
     <ScrollView
       style={[s.root, { paddingTop: insets.top + 6 }]}
@@ -415,6 +440,7 @@ export default function Analytics() {
               </View>
             </Card>
           </Animated.View>
+
 
           {/* 50/30/20 — Current vs Goal */}
           <Animated.View entering={FadeInUp.delay(140).duration(420)}>
@@ -672,72 +698,301 @@ export default function Analytics() {
               )}
             </Card>
           </Animated.View>
-          {/* Simple Cash Flow Forecast (30/90 days) */}
+{/* Cash Flow Forecast (30/90 days)  */}
 <Animated.View entering={FadeInUp.delay(320).duration(420)}>
   <Card>
-    <Text style={s.h1}>Cash Flow Forecast (30 / 90 Days)</Text>
-    <Text style={{ fontWeight: "600", color: "#6B7280", marginBottom: 8 }}>
-      Based on recurring inflows/outflows
-    </Text>
-
-    <CompactChart height={200}>
-      {(w, h) => (
-        <VictoryChart
-          width={w}
-          height={h}
-          padding={{ left: 60, right: 20, top: 20, bottom: 40 }}
-          containerComponent={<VictoryContainer responsive={false} />}
-          animate={{ duration: 700 }}
+    <View style={s.sectionHeader}>
+      <Text style={s.h1}>Cash Flow Forecast</Text>
+      
+      <View style={s.periodSelector}>
+        <Pressable
+          onPress={() => setForecastPeriod("30")}
+          style={[
+            s.periodButton,
+            forecastPeriod === "30" && s.periodButtonActive,
+          ]}
         >
-          <VictoryAxis
-            label="Days"
-            style={{
-              axisLabel: { padding: 35, fontSize: 12, fill: "#6B7280" },
-              tickLabels: { fontSize: 10, fill: "#6B7280" },
-            }}
-          />
-          <VictoryAxis
-            dependentAxis
-            tickFormat={(t:any) => `${(t / 1000).toFixed(1)}k`}
-            style={{
-              grid: { stroke: "#EEF2F7" },
-              tickLabels: { fontSize: 10, fill: "#6B7280" },
-            }}
-          />
+          <Text
+            style={[
+              s.periodButtonText,
+              forecastPeriod === "30" && s.periodButtonTextActive,
+            ]}
+          >
+            30 Days
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setForecastPeriod("90")}
+          style={[
+            s.periodButton,
+            forecastPeriod === "90" && s.periodButtonActive,
+          ]}
+        >
+          <Text
+            style={[
+              s.periodButtonText,
+              forecastPeriod === "90" && s.periodButtonTextActive,
+            ]}
+          >
+            90 Days
+          </Text>
+        </Pressable>
+      </View>
+    </View>
 
-          {/* Confidence Band */}
-          <VictoryArea
-            data={confidenceBand}
-            x="x"
-            y="y"
-            y0={(d: any) => d.y0}
-            style={{
-              data: { fill: "#cfe3ff", fillOpacity: 0.4, stroke: "none" },
-            }}
-          />
+    <View style={s.forecastSummary}>
+      <View style={s.forecastKPI}>
+        <Text style={s.forecastLabel}>Projected Balance</Text>
+        <Text style={s.forecastValue}>
+          {forecastPeriod === "30" ? "$2,100" : "$2,900"}
+        </Text>
+        <Text style={s.forecastDelta}>
+          {forecastPeriod === "30" ? "+31%" : "+81%"}
+        </Text>
+      </View>
+      <View style={s.forecastKPI}>
+        <Text style={s.forecastLabel}>Recurring Income</Text>
+        <Text style={s.forecastValue}>$3,850</Text>
+        <Text style={s.forecastSubtext}>Monthly</Text>
+      </View>
+      <View style={s.forecastKPI}>
+        <Text style={s.forecastLabel}>Fixed Expenses</Text>
+        <Text style={s.forecastValue}>$1,720</Text>
+        <Text style={s.forecastSubtext}>Monthly</Text>
+      </View>
+    </View>
 
-          {/* Forecast Line */}
-          <VictoryLine
-            data={forecastData}
-            style={{
-              data: { stroke: "#246BFD", strokeWidth: 3 },
-            }}
-          />
+    {/* Chart with Income & Expense Events */}
+    <View style={s.chartContainer}>
+      <VictoryChart
+        width={350}
+        height={250}
+        padding={{ left: 60, right: 40, top: 30, bottom: 40 }}
+        domain={{ 
+          x: [0, forecastPeriod === "30" ? 30 : 90],
+          y: [0, forecastPeriod === "30" ? 4000 : 3200]
+        }}
+      >
+        {/* Confidence Band */}
+        <VictoryArea
+          data={forecastPeriod === "30" ? confidence30d : confidence90d}
+          style={{
+            data: { 
+              fill: "#E5EDFF", 
+              fillOpacity: 0.4,
+              stroke: "transparent"
+            }
+          }}
+        />
+        
+        {/* Grid and Axes */}
+        <VictoryAxis
+          dependentAxis
+          tickFormat={(t:any) => `$${t/1000}k`}
+          style={{
+            grid: { stroke: "#EEF2F7", strokeWidth: 1 },
+            tickLabels: { fontSize: 10, fill: "#6B7280", fontWeight: "600" },
+            axis: { stroke: "transparent" }
+          }}
+        />
+        <VictoryAxis
+          tickFormat={(t:any) => `${t}d`}
+          style={{
+            tickLabels: { fontSize: 10, fill: "#6B7280", fontWeight: "600" },
+            axis: { stroke: "#E5E7EB", strokeWidth: 1 },
+          }}
+        />
 
-          {/* Dots */}
-          <VictoryGroup data={forecastData}>
-            <VictoryBar
-              style={{ data: { fill: "#246BFD" } }}
-              barWidth={3}
-              alignment="middle"
+        {/* Projected Balance Line */}
+        <VictoryLine
+          data={forecastPeriod === "90" ? forecast30d : forecast90d}
+          style={{
+            data: { 
+              stroke: "#246BFD", 
+              strokeWidth: 3,
+              strokeLinecap: "round"
+            }
+          }}
+        />
+
+        {/* Balance Data Points */}
+        <VictoryScatter
+          data={forecastPeriod === "30" ? forecast30d : forecast90d}
+          size={4}
+          style={{
+            data: { 
+              fill: "#FFFFFF",
+              stroke: "#246BFD",
+              strokeWidth: 2
+            }
+          }}
+        />
+
+        {/* Income Events - Green upward arrows */}
+        <VictoryScatter
+          data={forecastPeriod === "30" ? 
+            [
+              { day: 0, amount: 3850, label: "Salary" },
+              { day: 7, amount: 450, label: "Freelance" },
+              { day: 14, amount: 3850, label: "Salary" },
+              { day: 21, amount: 200, label: "Bonus" },
+              { day: 28, amount: 3850, label: "Salary" }
+            ] : 
+            [
+              { day: 0, amount: 3850, label: "Salary" },
+              { day: 14, amount: 450, label: "Freelance" },
+              { day: 28, amount: 3850, label: "Salary" },
+              { day: 42, amount: 200, label: "Bonus" },
+              { day: 56, amount: 3850, label: "Salary" },
+              { day: 70, amount: 450, label: "Freelance" },
+              { day: 84, amount: 3850, label: "Salary" }
+            ]
+          }
+          size={5}
+          symbol="triangleUp"
+          style={{
+            data: { 
+              fill: "#10B981",
+              stroke: "#10B981",
+              strokeWidth: 1
+            }
+          }}
+          labels={({ datum }: { datum: { amount: number } }) => `+$${datum.amount}`}
+          labelComponent={
+            <VictoryLabel
+              dy={-10}
+              style={{ fontSize: 8, fill: "#10B981", fontWeight: "700" }}
             />
-          </VictoryGroup>
-        </VictoryChart>
-      )}
-    </CompactChart>
+          }
+        />
+
+        {/* Expense Events - Red downward arrows */}
+        <VictoryScatter
+          data={forecastPeriod === "30" ? 
+            [
+              { day: 2, amount: 1200, label: "Rent" },
+              { day: 5, amount: 320, label: "Utilities" },
+              { day: 9, amount: 200, label: "Subscription" },
+              { day: 16, amount: 150, label: "Insurance" },
+              { day: 23, amount: 280, label: "Loan" },
+              { day: 27, amount: 180, label: "Membership" }
+            ] : 
+            [
+              { day: 2, amount: 1200, label: "Rent" },
+              { day: 16, amount: 320, label: "Utilities" },
+              { day: 23, amount: 200, label: "Subscription" },
+              { day: 30, amount: 150, label: "Insurance" },
+              { day: 37, amount: 1200, label: "Rent" },
+              { day: 44, amount: 280, label: "Loan" },
+              { day: 51, amount: 180, label: "Membership" },
+              { day: 58, amount: 1200, label: "Rent" },
+              { day: 65, amount: 320, label: "Utilities" },
+              { day: 72, amount: 200, label: "Subscription" },
+              { day: 79, amount: 150, label: "Insurance" },
+              { day: 86, amount: 280, label: "Loan" }
+            ]
+          }
+          size={5}
+          symbol="triangleDown"
+          style={{
+            data: { 
+              fill: "#EF4444",
+              stroke: "#EF4444",
+              strokeWidth: 1
+            }
+          }}
+          labels={({ datum }: { datum: { amount: number } }) => `-$${datum.amount}`}
+          labelComponent={
+            <VictoryLabel
+              dy={10}
+              style={{ fontSize: 8, fill: "#EF4444", fontWeight: "700" }}
+            />
+          }
+        />
+      </VictoryChart>
+    </View>
+
+    {/* Enhanced Legend */}
+    <View style={s.enhancedLegend}>
+      <View style={s.legendItem}>
+        <View style={[s.legendDot, { backgroundColor: "#246BFD" }]} />
+        <Text style={s.legendText}>Projected Balance</Text>
+      </View>
+      <View style={s.legendItem}>
+        <View style={[s.legendDot, { backgroundColor: "#10B981" }]} />
+        <Text style={s.legendText}>Income Events</Text>
+      </View>
+      <View style={s.legendItem}>
+        <View style={[s.legendDot, { backgroundColor: "#EF4444" }]} />
+        <Text style={s.legendText}>Expense Events</Text>
+      </View>
+      <View style={s.legendItem}>
+        <View style={[s.legendDot, { backgroundColor: "#E5EDFF", borderWidth: 1, borderColor: "#CBD5E1" }]} />
+        <Text style={s.legendText}>Confidence Range</Text>
+      </View>
+    </View>
+
+    {/* Event Examples */}
+    <View style={s.eventsExamples}>
+      <Text style={s.eventsTitle}>Recent Transactions</Text>
+      <View style={s.eventList}>
+        <View style={s.eventItem}>
+          <View style={[s.eventIcon, { backgroundColor: "#10B981" }]}>
+            <Text style={s.eventIconText}>↑</Text>
+          </View>
+          <View style={s.eventDetails}>
+            <Text style={s.eventDescription}>Salary Deposit</Text>
+            <Text style={s.eventDate}>2 days ago</Text>
+          </View>
+          <Text style={[s.eventAmount, { color: "#10B981" }]}>+$3,850</Text>
+        </View>
+        <View style={s.eventItem}>
+          <View style={[s.eventIcon, { backgroundColor: "#EF4444" }]}>
+            <Text style={s.eventIconText}>↓</Text>
+          </View>
+          <View style={s.eventDetails}>
+            <Text style={s.eventDescription}>Rent Payment</Text>
+            <Text style={s.eventDate}>5 days ago</Text>
+          </View>
+          <Text style={[s.eventAmount, { color: "#EF4444" }]}>-$1,200</Text>
+        </View>
+        <View style={s.eventItem}>
+          <View style={[s.eventIcon, { backgroundColor: "#10B981" }]}>
+            <Text style={s.eventIconText}>↑</Text>
+          </View>
+          <View style={s.eventDetails}>
+            <Text style={s.eventDescription}>Freelance Payment</Text>
+            <Text style={s.eventDate}>1 week ago</Text>
+          </View>
+          <Text style={[s.eventAmount, { color: "#10B981" }]}>+$450</Text>
+        </View>
+      </View>
+    </View>
+
+    {/* Key Insights */}
+    <View style={s.insightsContainer}>
+      <Text style={s.insightsTitle}>Key Insights</Text>
+      <View style={s.insightItem}>
+        <View style={[s.insightDot, { backgroundColor: "#10B981" }]} />
+        <Text style={s.insightText}>
+          Net positive cash flow of ${forecastPeriod === "30" ? "650" : "700"} per period
+        </Text>
+      </View>
+      <View style={s.insightItem}>
+        <View style={[s.insightDot, { backgroundColor: "#246BFD" }]} />
+        <Text style={s.insightText}>
+          {forecastPeriod === "30" ? "34%" : "38%"} savings rate from recurring income
+        </Text>
+      </View>
+      <View style={s.insightItem}>
+        <View style={[s.insightDot, { backgroundColor: "#E5EDFF" }]} />
+        <Text style={s.insightText}>
+          Projection confidence: {forecastPeriod === "30" ? "85%" : "78%"}
+        </Text>
+      </View>
+    </View>
   </Card>
 </Animated.View>
-
         </>
       )}
     </ScrollView>
@@ -759,6 +1014,32 @@ const s = StyleSheet.create({
   kvKey: { fontSize: 13, color: "#374151", fontWeight: "600" },
   kvVal: { fontSize: 13, fontWeight: "700", color: "#111827" },
   percentageText: { fontSize: 12, color: "#6B7280" },
+  legendText: { fontSize: 13, color: "#374151", fontWeight: "600" },
+
+  // Period selector
+  periodSelector: { flexDirection: "row", gap: 8 },
+  periodButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  periodButtonActive: {
+    backgroundColor: "#246BFD",
+    borderColor: "#246BFD",
+  },
+  periodButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  periodButtonTextActive: {
+    color: "#FFFFFF",
+  },
+  projectionText: { fontSize: 14, fontWeight: "600", color: "#6B7280", marginBottom: 12 },
+  forecastChart: { marginTop: 8, height: 240 },
 
   // top row inside trends card
   sectionHeader: {
@@ -786,6 +1067,164 @@ const s = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 2,
   },
+
+  // Forecast / enhanced styles
+  forecastSummary: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 20,
+    gap: 12,
+  },
+  forecastKPI: {
+    flex: 1,
+    alignItems: "center",
+    padding: 12,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  forecastLabel: {
+    fontSize: 12,
+    color: "#6B7280",
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  forecastValue: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#111827",
+    marginBottom: 2,
+  },
+  forecastDelta: {
+    fontSize: 12,
+    color: "#10B981",
+    fontWeight: "700",
+  },
+  forecastSubtext: {
+    fontSize: 10,
+    color: "#9CA3AF",
+    fontWeight: "500",
+  },
+
+  enhancedForecastChart: {
+    marginTop: 8,
+    height: 280,
+  },
+
+  enhancedLegend: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-around",
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    gap: 12,
+  },
+
+  insightsContainer: {
+    marginTop: 20,
+    padding: 16,
+    backgroundColor: "#F0F9FF",
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: "#246BFD",
+  },
+  insightsTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 8,
+  },
+  insightItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  insightDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 12,
+  },
+  insightText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#374151",
+    lineHeight: 20,
+  },
+
+  // chart container used by forecast section
+  chartContainer: {
+    height: 250,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    marginVertical: 16,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  // Add these to your stylesheet
+eventsExamples: {
+  marginTop: 20,
+  padding: 16,
+  backgroundColor: '#F8FAFC',
+  borderRadius: 12,
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+},
+eventsTitle: {
+  fontSize: 14,
+  fontWeight: '700',
+  color: '#111827',
+  marginBottom: 12,
+},
+eventList: {
+  gap: 12,
+},
+eventItem: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  padding: 12,
+  backgroundColor: '#FFFFFF',
+  borderRadius: 8,
+  borderWidth: 1,
+  borderColor: '#F1F5F9',
+},
+eventIcon: {
+  width: 32,
+  height: 32,
+  borderRadius: 16,
+  alignItems: 'center',
+  justifyContent: 'center',
+  marginRight: 12,
+},
+eventIconText: {
+  color: '#FFFFFF',
+  fontSize: 14,
+  fontWeight: 'bold',
+},
+eventDetails: {
+  flex: 1,
+},
+eventDescription: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: '#111827',
+  marginBottom: 2,
+},
+eventDate: {
+  fontSize: 12,
+  color: '#6B7280',
+},
+eventAmount: {
+  fontSize: 14,
+  fontWeight: '700',
+},
+
   dropdownButtonText: { fontSize: 14, fontWeight: "600", color: "#374151", flex: 1 },
 
   // chart wrapper
@@ -794,7 +1233,6 @@ const s = StyleSheet.create({
   // trends legend
   chartLegend: { marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: "#E5E7EB" },
   legendRow: { flexDirection: "row", justifyContent: "space-around", alignItems: "center" },
-  legendText: { fontSize: 13, color: "#374151", fontWeight: "600" },
 
   // month breakdown
   monthlyBreakdown: {
