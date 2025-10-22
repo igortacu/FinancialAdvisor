@@ -28,6 +28,7 @@ import {
   VictoryContainer,
   VictoryScatter,
   ChartsReady,
+  VictoryLabel,
 } from "../../lib/charts";
 
 // ---------- helpers ----------
@@ -697,7 +698,7 @@ export default function Analytics() {
               )}
             </Card>
           </Animated.View>
-{/* Cash Flow Forecast (30/90 days) - Fixed Chart Visibility */}
+{/* Cash Flow Forecast (30/90 days)  */}
 <Animated.View entering={FadeInUp.delay(320).duration(420)}>
   <Card>
     <View style={s.sectionHeader}>
@@ -761,7 +762,7 @@ export default function Analytics() {
       </View>
     </View>
 
-    {/* CHART VISUALIZATION - This was missing! */}
+    {/* Chart with Income & Expense Events */}
     <View style={s.chartContainer}>
       <VictoryChart
         width={350}
@@ -769,7 +770,7 @@ export default function Analytics() {
         padding={{ left: 60, right: 40, top: 30, bottom: 40 }}
         domain={{ 
           x: [0, forecastPeriod === "30" ? 30 : 90],
-          y: [0, forecastPeriod === "30" ? 2500 : 3200]
+          y: [0, forecastPeriod === "30" ? 4000 : 3200]
         }}
       >
         {/* Confidence Band */}
@@ -787,7 +788,7 @@ export default function Analytics() {
         {/* Grid and Axes */}
         <VictoryAxis
           dependentAxis
-          tickFormat={(t: any) => `$${t/1000}k`}
+          tickFormat={(t:any) => `$${t/1000}k`}
           style={{
             grid: { stroke: "#EEF2F7", strokeWidth: 1 },
             tickLabels: { fontSize: 10, fill: "#6B7280", fontWeight: "600" },
@@ -795,7 +796,7 @@ export default function Analytics() {
           }}
         />
         <VictoryAxis
-          tickFormat={(t: any) => `${t}d`}
+          tickFormat={(t:any) => `${t}d`}
           style={{
             tickLabels: { fontSize: 10, fill: "#6B7280", fontWeight: "600" },
             axis: { stroke: "#E5E7EB", strokeWidth: 1 },
@@ -804,7 +805,7 @@ export default function Analytics() {
 
         {/* Projected Balance Line */}
         <VictoryLine
-          data={forecastPeriod === "30" ? forecast30d : forecast90d}
+          data={forecastPeriod === "90" ? forecast30d : forecast90d}
           style={{
             data: { 
               stroke: "#246BFD", 
@@ -827,43 +828,91 @@ export default function Analytics() {
           }}
         />
 
-        {/* Income Events as Positive Markers */}
+        {/* Income Events - Green upward arrows */}
         <VictoryScatter
-          data={(forecastPeriod === "30" ? forecast30d : forecast90d).map((point, index) => ({
-            ...point,
-            y: point.y - 400 // Position income markers below the line
-          }))}
-          size={4}
-          symbol="plus"
+          data={forecastPeriod === "30" ? 
+            [
+              { day: 0, amount: 3850, label: "Salary" },
+              { day: 7, amount: 450, label: "Freelance" },
+              { day: 14, amount: 3850, label: "Salary" },
+              { day: 21, amount: 200, label: "Bonus" },
+              { day: 28, amount: 3850, label: "Salary" }
+            ] : 
+            [
+              { day: 0, amount: 3850, label: "Salary" },
+              { day: 14, amount: 450, label: "Freelance" },
+              { day: 28, amount: 3850, label: "Salary" },
+              { day: 42, amount: 200, label: "Bonus" },
+              { day: 56, amount: 3850, label: "Salary" },
+              { day: 70, amount: 450, label: "Freelance" },
+              { day: 84, amount: 3850, label: "Salary" }
+            ]
+          }
+          size={5}
+          symbol="triangleUp"
           style={{
             data: { 
               fill: "#10B981",
               stroke: "#10B981",
-              strokeWidth: 2
+              strokeWidth: 1
             }
           }}
+          labels={({ datum }: { datum: { amount: number } }) => `+$${datum.amount}`}
+          labelComponent={
+            <VictoryLabel
+              dy={-10}
+              style={{ fontSize: 8, fill: "#10B981", fontWeight: "700" }}
+            />
+          }
         />
 
-        {/* Expense Events as Negative Markers */}
+        {/* Expense Events - Red downward arrows */}
         <VictoryScatter
-          data={(forecastPeriod === "30" ? forecast30d : forecast90d).map((point, index) => ({
-            ...point,
-            y: point.y - 600 // Position expense markers below income markers
-          }))}
-          size={4}
-          symbol="minus"
+          data={forecastPeriod === "30" ? 
+            [
+              { day: 2, amount: 1200, label: "Rent" },
+              { day: 5, amount: 320, label: "Utilities" },
+              { day: 9, amount: 200, label: "Subscription" },
+              { day: 16, amount: 150, label: "Insurance" },
+              { day: 23, amount: 280, label: "Loan" },
+              { day: 27, amount: 180, label: "Membership" }
+            ] : 
+            [
+              { day: 2, amount: 1200, label: "Rent" },
+              { day: 16, amount: 320, label: "Utilities" },
+              { day: 23, amount: 200, label: "Subscription" },
+              { day: 30, amount: 150, label: "Insurance" },
+              { day: 37, amount: 1200, label: "Rent" },
+              { day: 44, amount: 280, label: "Loan" },
+              { day: 51, amount: 180, label: "Membership" },
+              { day: 58, amount: 1200, label: "Rent" },
+              { day: 65, amount: 320, label: "Utilities" },
+              { day: 72, amount: 200, label: "Subscription" },
+              { day: 79, amount: 150, label: "Insurance" },
+              { day: 86, amount: 280, label: "Loan" }
+            ]
+          }
+          size={5}
+          symbol="triangleDown"
           style={{
             data: { 
               fill: "#EF4444",
               stroke: "#EF4444",
-              strokeWidth: 2
+              strokeWidth: 1
             }
           }}
+          labels={({ datum }: { datum: { amount: number } }) => `-$${datum.amount}`}
+          labelComponent={
+            <VictoryLabel
+              dy={10}
+              style={{ fontSize: 8, fill: "#EF4444", fontWeight: "700" }}
+            />
+          }
         />
       </VictoryChart>
     </View>
 
-    {/* Legend */}
+    {/* Enhanced Legend */}
     <View style={s.enhancedLegend}>
       <View style={s.legendItem}>
         <View style={[s.legendDot, { backgroundColor: "#246BFD" }]} />
@@ -880,6 +929,43 @@ export default function Analytics() {
       <View style={s.legendItem}>
         <View style={[s.legendDot, { backgroundColor: "#E5EDFF", borderWidth: 1, borderColor: "#CBD5E1" }]} />
         <Text style={s.legendText}>Confidence Range</Text>
+      </View>
+    </View>
+
+    {/* Event Examples */}
+    <View style={s.eventsExamples}>
+      <Text style={s.eventsTitle}>Recent Transactions</Text>
+      <View style={s.eventList}>
+        <View style={s.eventItem}>
+          <View style={[s.eventIcon, { backgroundColor: "#10B981" }]}>
+            <Text style={s.eventIconText}>↑</Text>
+          </View>
+          <View style={s.eventDetails}>
+            <Text style={s.eventDescription}>Salary Deposit</Text>
+            <Text style={s.eventDate}>2 days ago</Text>
+          </View>
+          <Text style={[s.eventAmount, { color: "#10B981" }]}>+$3,850</Text>
+        </View>
+        <View style={s.eventItem}>
+          <View style={[s.eventIcon, { backgroundColor: "#EF4444" }]}>
+            <Text style={s.eventIconText}>↓</Text>
+          </View>
+          <View style={s.eventDetails}>
+            <Text style={s.eventDescription}>Rent Payment</Text>
+            <Text style={s.eventDate}>5 days ago</Text>
+          </View>
+          <Text style={[s.eventAmount, { color: "#EF4444" }]}>-$1,200</Text>
+        </View>
+        <View style={s.eventItem}>
+          <View style={[s.eventIcon, { backgroundColor: "#10B981" }]}>
+            <Text style={s.eventIconText}>↑</Text>
+          </View>
+          <View style={s.eventDetails}>
+            <Text style={s.eventDescription}>Freelance Payment</Text>
+            <Text style={s.eventDate}>1 week ago</Text>
+          </View>
+          <Text style={[s.eventAmount, { color: "#10B981" }]}>+$450</Text>
+        </View>
       </View>
     </View>
 
@@ -1081,6 +1167,63 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E5E7EB",
   },
+  // Add these to your stylesheet
+eventsExamples: {
+  marginTop: 20,
+  padding: 16,
+  backgroundColor: '#F8FAFC',
+  borderRadius: 12,
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+},
+eventsTitle: {
+  fontSize: 14,
+  fontWeight: '700',
+  color: '#111827',
+  marginBottom: 12,
+},
+eventList: {
+  gap: 12,
+},
+eventItem: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  padding: 12,
+  backgroundColor: '#FFFFFF',
+  borderRadius: 8,
+  borderWidth: 1,
+  borderColor: '#F1F5F9',
+},
+eventIcon: {
+  width: 32,
+  height: 32,
+  borderRadius: 16,
+  alignItems: 'center',
+  justifyContent: 'center',
+  marginRight: 12,
+},
+eventIconText: {
+  color: '#FFFFFF',
+  fontSize: 14,
+  fontWeight: 'bold',
+},
+eventDetails: {
+  flex: 1,
+},
+eventDescription: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: '#111827',
+  marginBottom: 2,
+},
+eventDate: {
+  fontSize: 12,
+  color: '#6B7280',
+},
+eventAmount: {
+  fontSize: 14,
+  fontWeight: '700',
+},
 
   dropdownButtonText: { fontSize: 14, fontWeight: "600", color: "#374151", flex: 1 },
 
