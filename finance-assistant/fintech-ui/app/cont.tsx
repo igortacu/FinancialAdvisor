@@ -154,7 +154,7 @@ export default function MultiStepForm() {
         paddingTop: 80,
         paddingHorizontal: 30,
         backgroundColor: Colors.light.background,
-      }}
+      }}>
       <KeyboardAvoidingView
         behavior={Platform.select({ ios: "padding", android: undefined })}
         style={{ flex: 1 }}
