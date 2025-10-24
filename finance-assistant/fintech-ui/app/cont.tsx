@@ -10,34 +10,54 @@ import {
   Platform,
   ScrollView,
   Alert,
+  ViewStyle,
+  ImageBackgroundProps,
 } from "react-native";
 import { Colors } from "@/constants/theme";
 import MultiSlider from "@ptomasroos/react-native-multi-slider";
-
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 
 // Set this to false to disable the hero image temporarily during development
 const USE_HERO_IMAGE = false; // Change this to true when hero.jpg is available
 
+// Styles that will be used by both View and ImageBackground
+const containerStyles = StyleSheet.create({
+  base: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
+    paddingTop: 80,
+    paddingHorizontal: 30,
+  },
+  solid: {
+    backgroundColor: Colors.light.background,
+  },
+});
+
 type BackgroundContainerProps = {
   children: React.ReactNode;
-  style?: any;
-};
+  style?: ViewStyle;
+} & Partial<ImageBackgroundProps>;
 
-const BackgroundContainer: React.FC<BackgroundContainerProps> = ({ children, style }) => {
+const BackgroundContainer: React.FC<BackgroundContainerProps> = ({ children, style, ...props }) => {
   if (USE_HERO_IMAGE) {
     return (
       <ImageBackground
         source={require("../assets/images/hero.jpg")}
-        style={style}
+        style={[containerStyles.base, style]}
         resizeMode="cover"
+        {...props}
       >
         {children}
       </ImageBackground>
     );
   }
-  return <View style={[style, { backgroundColor: Colors.light.background }]}>{children}</View>;
+  return (
+    <View style={[containerStyles.base, containerStyles.solid, style]}>
+      {children}
+    </View>
+  );
 };
 
 type Spending = { rent: number; utilities: number; transportation: number; other: number };
@@ -167,40 +187,7 @@ export default function MultiStepForm() {
     </Pressable>
   );
 
-  const renderContent = () => {
-    if (USE_HERO_IMAGE) {
-      return (
-        <ImageBackground
-          source={require("../assets/images/hero.jpg")}
-          style={{
-            width: "100%",
-            height: "100%",
-            paddingTop: 80,
-            paddingHorizontal: 30,
-          }}
-          resizeMode="cover"
-        >
-          <KeyboardAvoidingView
-    ? {
-        source: require("../assets/images/hero.jpg"),
-        style: {
-          width: "100%",
-          height: "100%",
-          paddingTop: 80,
-          paddingHorizontal: 30,
-        },
-        resizeMode: "cover" as const,
-      }
-    : {
-        style: {
-          width: "100%",
-          height: "100%",
-          paddingTop: 80,
-          paddingHorizontal: 30,
-          backgroundColor: Colors.light.background,
-        },
-      };
-
+  // We're using BackgroundContainer instead of this renderContent
   return (
     <BackgroundContainer
       style={{
@@ -445,7 +432,37 @@ export default function MultiStepForm() {
   );
 }
 
-const styles = StyleSheet.create({
+import { TextStyle } from 'react-native';
+
+interface Styles {
+  container: ViewStyle;
+  label: TextStyle;
+  heroWrap: ViewStyle;
+  title: TextStyle;
+  subtitle: TextStyle;
+  card: ViewStyle;
+  inputWrap: ViewStyle;
+  input: TextStyle;
+  btn: ViewStyle;
+  btnPrimary: ViewStyle;
+  btnIndigo: ViewStyle;
+  btnText: TextStyle;
+  btnGhost: ViewStyle;
+  btnGhostText: TextStyle;
+  backButton: ViewStyle;
+  goalButtonsContainer: ViewStyle;
+  goalButton: ViewStyle;
+  goalButtonSelected: ViewStyle;
+  goalButtonText: TextStyle;
+  goalButtonTextSelected: TextStyle;
+  optionButton: ViewStyle;
+  optionSelected: ViewStyle;
+  optionText: TextStyle;
+  optionTextSelected: TextStyle;
+  errText: TextStyle;
+};
+
+const styles = StyleSheet.create<Styles>({
   container: {
     padding: 20,
     backgroundColor: "#ffffff",
