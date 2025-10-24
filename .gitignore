@@ -20,3 +20,17 @@ TestingPurposes/Nikita/Classifier/category_classifier.pth
 # OS
 .DS_Store
 Thumbs.db
+
+# Data files (too large for Git)
+*.traineddata
+*.csv
+users_current_budget_series.csv
+eng.traineddata
+ron.traineddata
+
+# Large media files
+*.jpg
+*.png
+*.gif
+*.mp4
+*.mov
