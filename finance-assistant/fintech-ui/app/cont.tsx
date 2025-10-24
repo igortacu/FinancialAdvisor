@@ -14,8 +14,8 @@ import {
 import { Colors } from "@/constants/theme";
 import MultiSlider from "@ptomasroos/react-native-multi-slider";
 
-// Set this to false to disable the hero image temporarily
-const USE_HERO_IMAGE = false;
+// Set this to false to disable the hero image temporarily during development
+const USE_HERO_IMAGE = false; // Change this to true when hero.jpg is available
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 
@@ -146,15 +146,30 @@ export default function MultiStepForm() {
     </Pressable>
   );
 
+  const Container = USE_HERO_IMAGE ? ImageBackground : View;
+  const containerProps = USE_HERO_IMAGE
+    ? {
+        source: require("../assets/images/hero.jpg"),
+        style: {
+          width: "100%",
+          height: "100%",
+          paddingTop: 80,
+          paddingHorizontal: 30,
+        },
+        resizeMode: "cover" as const,
+      }
+    : {
+        style: {
+          width: "100%",
+          height: "100%",
+          paddingTop: 80,
+          paddingHorizontal: 30,
+          backgroundColor: Colors.light.background,
+        },
+      };
+
   return (
-    <View
-      style={{
-        width: "100%",
-        height: "100%",
-        paddingTop: 80,
-        paddingHorizontal: 30,
-        backgroundColor: Colors.light.background,
-      }}>
+    <Container {...containerProps}>
       <KeyboardAvoidingView
         behavior={Platform.select({ ios: "padding", android: undefined })}
         style={{ flex: 1 }}
@@ -386,7 +401,7 @@ export default function MultiStepForm() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </Container>
   );
 }
 
