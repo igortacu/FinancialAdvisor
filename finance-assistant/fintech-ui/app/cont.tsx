@@ -11,7 +11,11 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
+import { Colors } from "@/constants/theme";
 import MultiSlider from "@ptomasroos/react-native-multi-slider";
+
+// Set this to false to disable the hero image temporarily
+const USE_HERO_IMAGE = false;
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 
@@ -143,11 +147,14 @@ export default function MultiStepForm() {
   );
 
   return (
-    <ImageBackground
-      source={require("../assets/images/hero.jpg")}
-      style={{ width: "100%", height: "100%", paddingTop: 80, paddingHorizontal: 30 }}
-      resizeMode="cover"
-    >
+    <View
+      style={{
+        width: "100%",
+        height: "100%",
+        paddingTop: 80,
+        paddingHorizontal: 30,
+        backgroundColor: Colors.light.background,
+      }}
       <KeyboardAvoidingView
         behavior={Platform.select({ ios: "padding", android: undefined })}
         style={{ flex: 1 }}
@@ -379,7 +386,7 @@ export default function MultiStepForm() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </ImageBackground>
+    </View>
   );
 }
 
