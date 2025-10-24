@@ -25,6 +25,7 @@ export default function TabLayout() {
         <Tabs.Screen name="transactions" options={{ title: "Transactions" }} />
         <Tabs.Screen name="analytics" options={{ title: "Analytics" }} />
         <Tabs.Screen name="investments" options={{ title: "Investments" }} />
+        <Tabs.Screen name="profile" options={{ title: "Profile" }} />
       </Tabs>
 
       {/* floating action button over the dock */}

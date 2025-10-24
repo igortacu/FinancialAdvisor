@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
-  ActivityIndicator, ImageBackground, Platform, KeyboardAvoidingView,
+  ActivityIndicator, Platform, KeyboardAvoidingView,
   useWindowDimensions,
 } from "react-native";
+import { Colors } from "@/constants/theme";
 import * as AuthSession from "expo-auth-session";
 import { Ionicons } from "@expo/vector-icons";
 import Animated, { FadeInUp, FadeOutDown } from "react-native-reanimated";
@@ -268,11 +269,7 @@ export default function AuthScreen(): React.ReactElement {
   };
 
   return (
-    <ImageBackground
-      source={require("../../assets/images/hero.jpg")}
-      style={{ width: "100%", height: "100%" }}
-      resizeMode="cover"
-    >
+    <View style={[styles.screen, { backgroundColor: Colors.light.background }]}>
       <KeyboardAvoidingView
         style={styles.screen}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -364,7 +361,7 @@ export default function AuthScreen(): React.ReactElement {
           )}
         </View>
       </KeyboardAvoidingView>
-    </ImageBackground>
+    </View>
   );
 }
 
