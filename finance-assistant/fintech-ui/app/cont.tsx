@@ -14,10 +14,31 @@ import {
 import { Colors } from "@/constants/theme";
 import MultiSlider from "@ptomasroos/react-native-multi-slider";
 
-// Set this to false to disable the hero image temporarily during development
-const USE_HERO_IMAGE = false; // Change this to true when hero.jpg is available
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+
+// Set this to false to disable the hero image temporarily during development
+const USE_HERO_IMAGE = false; // Change this to true when hero.jpg is available
+
+type BackgroundContainerProps = {
+  children: React.ReactNode;
+  style?: any;
+};
+
+const BackgroundContainer: React.FC<BackgroundContainerProps> = ({ children, style }) => {
+  if (USE_HERO_IMAGE) {
+    return (
+      <ImageBackground
+        source={require("../assets/images/hero.jpg")}
+        style={style}
+        resizeMode="cover"
+      >
+        {children}
+      </ImageBackground>
+    );
+  }
+  return <View style={[style, { backgroundColor: Colors.light.background }]}>{children}</View>;
+};
 
 type Spending = { rent: number; utilities: number; transportation: number; other: number };
 type Income = { from: number; to: number };
@@ -146,8 +167,20 @@ export default function MultiStepForm() {
     </Pressable>
   );
 
-  const Container = USE_HERO_IMAGE ? ImageBackground : View;
-  const containerProps = USE_HERO_IMAGE
+  const renderContent = () => {
+    if (USE_HERO_IMAGE) {
+      return (
+        <ImageBackground
+          source={require("../assets/images/hero.jpg")}
+          style={{
+            width: "100%",
+            height: "100%",
+            paddingTop: 80,
+            paddingHorizontal: 30,
+          }}
+          resizeMode="cover"
+        >
+          <KeyboardAvoidingView
     ? {
         source: require("../assets/images/hero.jpg"),
         style: {
@@ -169,7 +202,14 @@ export default function MultiStepForm() {
       };
 
   return (
-    <Container {...containerProps}>
+    <BackgroundContainer
+      style={{
+        width: "100%",
+        height: "100%",
+        paddingTop: 80,
+        paddingHorizontal: 30,
+      }}
+    >
       <KeyboardAvoidingView
         behavior={Platform.select({ ios: "padding", android: undefined })}
         style={{ flex: 1 }}
@@ -401,7 +441,7 @@ export default function MultiStepForm() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </Container>
+    </BackgroundContainer>
   );
 }
 
