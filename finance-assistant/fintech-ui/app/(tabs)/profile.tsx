@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, useColorScheme } from 'react-native';
 import { useAuth } from '@/store/auth';
 import { supabase } from '@/api';
 import { ThemedView } from '@/components/themed-view';
@@ -9,6 +9,8 @@ import { View, TouchableOpacity } from 'react-native';
 
 export default function ProfileScreen() {
   const { user } = useAuth();
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -27,12 +29,19 @@ export default function ProfileScreen() {
   return (
     <ThemedView style={styles.container}>
       <View style={styles.content}>
-        <View style={styles.avatarContainer}>
+        <View style={[styles.avatarContainer, { backgroundColor: colors.tint }]}>
           <ThemedText style={styles.avatarText}>{getInitials(user?.name)}</ThemedText>
         </View>
-        <ThemedText style={styles.nameText}>{user?.name || 'No name'}</ThemedText>
-        <ThemedText style={styles.emailText}>{user?.email || 'No email'}</ThemedText>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <ThemedText style={[styles.nameText, { color: colors.text }]}>
+          {user?.name || 'No name'}
+        </ThemedText>
+        <ThemedText style={[styles.emailText, { color: colors.text }]}>
+          {user?.email || 'No email'}
+        </ThemedText>
+        <TouchableOpacity 
+          style={[styles.logoutButton, { backgroundColor: colors.tint }]} 
+          onPress={handleLogout}
+        >
           <ThemedText style={styles.logoutText}>Logout</ThemedText>
         </TouchableOpacity>
       </View>
@@ -44,7 +53,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: Colors.light.background,
   },
   content: {
     flex: 1,
@@ -55,7 +63,6 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: Colors.light.tint,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
@@ -76,7 +83,6 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   logoutButton: {
-    backgroundColor: Colors.light.tint,
     paddingVertical: 12,
     paddingHorizontal: 32,
     borderRadius: 8,
