@@ -17,6 +17,13 @@ import { ThemedText } from '@/components/themed-text';
 import { Colors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { 
+  isBiometricSupported, 
+  enableBiometricLogin, 
+  disableBiometricLogin,
+  isBiometricLoginEnabled,
+  getBiometricType
+} from '@/lib/biometric';
 
 export default function ProfileScreen() {
   const { user, setUser } = useAuth();
@@ -29,11 +36,29 @@ export default function ProfileScreen() {
   const [email, setEmail] = useState(user?.email || '');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [biometricsEnabled, setBiometricsEnabled] = useState(false);
+  const [biometricType, setBiometricType] = useState('Biometric');
+  const [biometricSupported, setBiometricSupported] = useState(false);
 
   useEffect(() => {
     setName(user?.name || '');
     setEmail(user?.email || '');
   }, [user]);
+
+  // Check biometric support and status on mount
+  useEffect(() => {
+    (async () => {
+      const supported = await isBiometricSupported();
+      setBiometricSupported(supported);
+      
+      if (supported) {
+        const type = await getBiometricType();
+        setBiometricType(type);
+        
+        const enabled = await isBiometricLoginEnabled();
+        setBiometricsEnabled(enabled);
+      }
+    })();
+  }, []);
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return '?';
@@ -67,6 +92,75 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleBiometricToggle = async (value: boolean) => {
+    if (!biometricSupported) {
+      Alert.alert(
+        'Not Available',
+        'Biometric authentication is not available on this device.'
+      );
+      return;
+    }
+
+    if (value) {
+      // Enable biometric login
+      Alert.alert(
+        `Enable ${biometricType}`,
+        `Your login credentials will be securely stored for ${biometricType} authentication.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Enable',
+            onPress: async () => {
+              // We need the user's password, but we don't have it stored
+              // For now, we'll prompt them to re-enter it
+              Alert.prompt(
+                'Enter Password',
+                'Please enter your password to enable biometric login',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'OK',
+                    onPress: async (password?: string) => {
+                      if (!password || !user?.email) {
+                        Alert.alert('Error', 'Password is required');
+                        return;
+                      }
+                      
+                      const success = await enableBiometricLogin(user.email, password);
+                      if (success) {
+                        setBiometricsEnabled(true);
+                        Alert.alert('Success', `${biometricType} login enabled!`);
+                      }
+                    },
+                  },
+                ],
+                'secure-text'
+              );
+            },
+          },
+        ]
+      );
+    } else {
+      // Disable biometric login
+      Alert.alert(
+        `Disable ${biometricType}`,
+        'Are you sure you want to disable biometric login?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Disable',
+            style: 'destructive',
+            onPress: async () => {
+              await disableBiometricLogin();
+              setBiometricsEnabled(false);
+              Alert.alert('Success', `${biometricType} login disabled`);
+            },
+          },
+        ]
+      );
+    }
+  };
+
   const handleLogout = () => {
     Alert.alert(
       'Logout',
@@ -78,7 +172,7 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             await supabase.auth.signOut();
-            router.replace('/auth');
+            router.replace('/login');
           },
         },
       ]
@@ -98,6 +192,12 @@ export default function ProfileScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
+          <TouchableOpacity 
+            onPress={() => router.back()}
+            style={styles.backButton}
+          >
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
           <ThemedText style={styles.headerTitle}>Profile</ThemedText>
           <TouchableOpacity
             onPress={() => isEditing ? handleSave() : setIsEditing(true)}
@@ -200,13 +300,14 @@ export default function ProfileScreen() {
               <View style={styles.settingInfo}>
                 <ThemedText style={styles.fieldLabel}>Biometric Login</ThemedText>
                 <ThemedText style={[styles.settingDescription, { color: colors.text + '60' }]}>
-                  Use Face ID / Touch ID
+                  Use {biometricType}
                 </ThemedText>
               </View>
             </View>
             <Switch
               value={biometricsEnabled}
-              onValueChange={setBiometricsEnabled}
+              onValueChange={handleBiometricToggle}
+              disabled={!biometricSupported}
               trackColor={{ false: colors.text + '30', true: colors.tint + '60' }}
               thumbColor={biometricsEnabled ? colors.tint : '#f4f3f4'}
             />
@@ -277,9 +378,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 30,
   },
+  backButton: {
+    padding: 8,
+    marginLeft: -8,
+  },
   headerTitle: {
     fontSize: 32,
     fontWeight: 'bold',
+    flex: 1,
+    textAlign: 'center',
+    marginHorizontal: 16,
   },
   editButton: {
     fontSize: 16,

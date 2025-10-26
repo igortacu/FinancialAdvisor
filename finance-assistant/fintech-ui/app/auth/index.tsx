@@ -15,11 +15,16 @@ import { supabase } from "@/api";
 import { useAuth } from "@/store/auth";
 import { getRedirectTo } from "@/lib/authRedirect";
 import { upsertProfile, getProfile } from "@/lib/profile";
+import { 
+  isBiometricLoginEnabled, 
+  getStoredCredentials,
+  getBiometricType 
+} from "@/lib/biometric";
 
 type Screen = "welcome" | "register" | "login";
 
 export default function AuthScreen(): React.ReactElement {
-  const { setUser } = useAuth();
+  const { user, setUser, isLoading: authLoading } = useAuth();
   const [screen, setScreen] = useState<Screen>("welcome");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,6 +32,8 @@ export default function AuthScreen(): React.ReactElement {
   const [surname, setSurname] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [secure, setSecure] = useState(true);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricType, setBiometricType] = useState("Biometric");
 
   const { height, width } = useWindowDimensions();
   const hScale = Math.min(height / 800, 1);
@@ -42,27 +49,71 @@ export default function AuthScreen(): React.ReactElement {
     return "Financial Advisor";
   }, [screen]);
 
-  // session resume (OAuth returns here)
+  // If user is already logged in, redirect to tabs
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.replace("/(tabs)");
+    }
+  }, [user, authLoading]);
+
+  // Check if biometric login is available
   useEffect(() => {
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Store/update profile in database (OAuth provides name in metadata)
-      await upsertProfile();
-      
-      // Fetch profile from database
-      const profile = await getProfile(user.id);
-
-      setUser({
-        id: user.id,
-        email: user.email ?? "",
-        name: profile?.name ?? user.user_metadata?.name ?? null,
-        avatarUrl: user.user_metadata?.avatar_url ?? null,
-      });
-      router.replace("/(tabs)");
+      const enabled = await isBiometricLoginEnabled();
+      if (enabled) {
+        setBiometricAvailable(true);
+        const type = await getBiometricType();
+        setBiometricType(type);
+      }
     })();
   }, []);
+
+  async function handleBiometricLogin() {
+    setIsLoading(true);
+    try {
+      const credentials = await getStoredCredentials();
+      
+      if (!credentials) {
+        Alert.alert('Authentication Failed', 'Biometric authentication was not successful.');
+        return;
+      }
+
+      console.log("🔵 Attempting biometric login");
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: credentials.email,
+        password: credentials.password
+      });
+      
+      if (error) {
+        console.error("❌ Biometric login error:", error);
+        throw error;
+      }
+
+      if (!data.user || !data.session) {
+        throw new Error("Login failed - no user or session returned");
+      }
+
+      console.log("✅ Biometric login successful");
+
+      // Fetch profile from database
+      const profile = await getProfile(data.user.id);
+      
+      setUser({
+        id: data.user.id,
+        email: data.user.email ?? credentials.email,
+        name: profile?.name ?? data.user.user_metadata?.name ?? null,
+        avatarUrl: data.user.user_metadata?.avatar_url ?? null,
+      });
+      
+      router.replace("/(tabs)");
+    } catch (err: any) {
+      console.error("❌ Biometric login error:", err);
+      Alert.alert("Login Failed", err?.message ?? "Biometric login failed");
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   async function signInWithGoogle() {
     const { error } = await supabase.auth.signInWithOAuth({
@@ -348,6 +399,19 @@ export default function AuthScreen(): React.ReactElement {
                   <TouchableOpacity style={[styles.btn, styles.btnIndigo]} onPress={handleLogin} disabled={isLoading}>
                     {isLoading ? <ActivityIndicator color="#fff" /> : (<><Ionicons name="log-in" size={18} color="#fff" /><Text style={styles.btnText}>Login</Text></>)}
                   </TouchableOpacity>
+
+                  {biometricAvailable && (
+                    <TouchableOpacity 
+                      style={[styles.btn, styles.btnBiometric]} 
+                      onPress={handleBiometricLogin} 
+                      disabled={isLoading}
+                    >
+                      <Ionicons name="finger-print" size={20} color="#5B76F7" />
+                      <Text style={[styles.btnText, { color: '#5B76F7' }]}>
+                        Login with {biometricType}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </Animated.View>
             )}
@@ -419,6 +483,7 @@ const styles = StyleSheet.create({
   btn: { flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center", paddingVertical: 14, borderRadius: 14, width: "100%", marginTop: 10 },
   btnPrimary: { backgroundColor: "#3b6df6", shadowColor: "#3b82f6", shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
   btnIndigo: { backgroundColor: "#2563eb", shadowColor: "#2563eb", shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
+  btnBiometric: { backgroundColor: "#ffffff", borderWidth: 2, borderColor: "#5B76F7", shadowColor: "#5B76F7", shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
   btnGoogle: { backgroundColor: "#ffffff" },
   btnText: { color: "#fff", fontSize: 16, textAlign: "center", fontWeight: "700" },
   btnTextDark: { color: "#1e293b" },

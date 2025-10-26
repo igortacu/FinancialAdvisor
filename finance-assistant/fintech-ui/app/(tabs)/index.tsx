@@ -27,6 +27,7 @@ import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Reanimated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useAuth } from "@/store/auth";
+import { useRouter } from "expo-router";
 
 /* ================= Mock data ================= */
 const accounts = [
@@ -380,6 +381,7 @@ function useTxHistory() {
 export default function Dashboard() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const router = useRouter();
 
   const y = React.useRef(new RNAnimated.Value(0)).current;
   const [menuVisible, setMenuVisible] = React.useState(false);
@@ -405,9 +407,16 @@ export default function Dashboard() {
     (user?.name && String(user.name)) ||
     (user?.email && String(user.email).split("@")[0]) ||
     "Guest";
-  const avatarSrc = user?.avatarUrl
-    ? { uri: user.avatarUrl }
-    : { uri: "https://i.pravatar.cc/100?img=12" };
+  
+  // Get initials for avatar
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(part => part[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2) || '?';
+  };
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 6 }]}>
@@ -418,7 +427,17 @@ export default function Dashboard() {
         >
           <View style={styles.pillHeader}>
             <View style={styles.avatarWrap}>
-              <Image source={avatarSrc} style={styles.avatarImg} />
+              {user?.avatarUrl ? (
+                <Image 
+                  source={{ uri: user.avatarUrl }} 
+                  style={styles.avatarImg}
+                  onError={() => console.log('Avatar failed to load')}
+                />
+              ) : (
+                <View style={[styles.avatarImg, styles.avatarPlaceholder]}>
+                  <Text style={styles.avatarInitials}>{getInitials(displayName)}</Text>
+                </View>
+              )}
             </View>
 
             <View style={{ flex: 1, marginLeft: 12 }}>
@@ -426,7 +445,11 @@ export default function Dashboard() {
               <Text style={styles.greetingName}>{displayName}</Text>
             </View>
 
-            <TouchableOpacity style={styles.gearBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <TouchableOpacity 
+              style={styles.gearBtn} 
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              onPress={() => router.push("/profile")}
+            >
               <Ionicons name="settings-outline" size={22} />
             </TouchableOpacity>
           </View>
@@ -682,6 +705,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   avatarImg: { width: 40, height: 40, borderRadius: 20 },
+  avatarPlaceholder: { 
+    backgroundColor: UI.primary, 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
+  avatarInitials: { 
+    color: '#fff', 
+    fontSize: 16, 
+    fontWeight: '700' 
+  },
   greetingMuted: { color: UI.sub, fontSize: 12, marginBottom: 2 },
   greetingName: { color: UI.text, fontSize: 20, fontWeight: "900" },
   gearBtn: {
