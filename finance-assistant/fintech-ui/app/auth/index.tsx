@@ -33,7 +33,7 @@ export default function AuthScreen(): React.ReactElement {
   const wScale = Math.max(Math.min(width / 390, 1), 0.85);
   const redirectTo = Platform.select({
     web: window.location.origin,
-    default: AuthSession.makeRedirectUri({ scheme: "yourapp" }),
+    default: AuthSession.makeRedirectUri({ scheme: "fintechui" }),
   })!;
 
   const title = useMemo(() => {
