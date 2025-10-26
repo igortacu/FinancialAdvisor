@@ -27,15 +27,3 @@ Thumbs.db
 users_current_budget_series.csv
 eng.traineddata
 ron.traineddata
-
-# Large media files (but not app assets)
-videos/*.mp4
-videos/*.mov
-data/*.jpg
-data/*.png
-data/*.gif
-
-# Allow app assets
-!**/assets/**/*.jpg
-!**/assets/**/*.png
-!**/assets/**/*.gif
