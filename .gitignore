@@ -27,3 +27,11 @@ Thumbs.db
 users_current_budget_series.csv
 eng.traineddata
 ron.traineddata
+
+# Large media files  
+*.mp4
+*.mov
+
+# Allow essential UI images in assets
+!**/assets/images/*.jpg
+!**/assets/images/*.png
