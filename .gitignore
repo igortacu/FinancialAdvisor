@@ -27,10 +27,3 @@ Thumbs.db
 users_current_budget_series.csv
 eng.traineddata
 ron.traineddata
-
-# Large media files
-*.jpg
-*.png
-*.gif
-*.mp4
-*.mov
