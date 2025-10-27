@@ -1,6 +1,14 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
 import { Alert, Platform } from 'react-native';
+
+// Avoid spamming the same configuration alert in one session
+let faceIdConfigAlertShown = false;
+
+function isExpoGoIOS(): boolean {
+  return Platform.OS === 'ios' && Constants.appOwnership === 'expo';
+}
 
 const BIOMETRIC_ENABLED_KEY = 'biometric_enabled';
 const STORED_EMAIL_KEY = 'stored_email';
@@ -22,6 +30,13 @@ export async function isBiometricSupported(): Promise<boolean> {
   }
   
   try {
+    // In Expo Go on iOS, NSFaceIDUsageDescription cannot be applied,
+    // so Face ID will not work. Report unsupported here to avoid prompting.
+    if (isExpoGoIOS()) {
+      console.log('ℹ️ Face ID unavailable in Expo Go (build-time permission required).');
+      return false;
+    }
+
     const hasHardware = await LocalAuthentication.hasHardwareAsync();
     const isEnrolled = await LocalAuthentication.isEnrolledAsync();
     return hasHardware && isEnrolled;
@@ -68,14 +83,52 @@ export async function authenticateWithBiometrics(): Promise<boolean> {
   }
   
   try {
+    if (isExpoGoIOS()) {
+      if (!faceIdConfigAlertShown) {
+        Alert.alert(
+          'Face ID not available in this build',
+          'iOS requires NSFaceIDUsageDescription in the app Info.plist. Expo Go cannot apply this. Build a Development Client (EAS Dev Build) or a standalone app to use Face ID.'
+        );
+        faceIdConfigAlertShown = true;
+      }
+      return false;
+    }
+
     const biometricType = await getBiometricType();
+    
+    console.log(`👤 Prompting ${biometricType} authentication...`);
     
     const result = await LocalAuthentication.authenticateAsync({
       promptMessage: `Authenticate with ${biometricType}`,
       cancelLabel: 'Cancel',
-      disableDeviceFallback: false,
-      fallbackLabel: 'Use passcode',
+      disableDeviceFallback: true, // Don't fall back to device passcode
+      fallbackLabel: '', // No fallback option
     });
+
+    if ((result as any).warning || (result as any).error) {
+      console.log(`ℹ️ Biometric result detail:`, {
+        error: (result as any).error,
+        warning: (result as any).warning,
+      });
+    }
+
+    // Handle the common iOS configuration error when running under Expo Go
+    if ((result as any).error === 'missing_usage_description') {
+      if (!faceIdConfigAlertShown) {
+        Alert.alert(
+          'Face ID not available in this build',
+          'iOS requires NSFaceIDUsageDescription in the app Info.plist. Expo Go cannot apply this. Build a Development Client (EAS Dev Build) or a standalone app to use Face ID.'
+        );
+        faceIdConfigAlertShown = true;
+      }
+      return false;
+    }
+
+    if (result.success) {
+      console.log(`✅ ${biometricType} authentication successful`);
+    } else {
+      console.log(`❌ ${biometricType} authentication failed or cancelled`);
+    }
 
     return result.success;
   } catch (error) {
@@ -87,7 +140,7 @@ export async function authenticateWithBiometrics(): Promise<boolean> {
 /**
  * Enable biometric login by storing credentials
  */
-export async function enableBiometricLogin(email: string, password: string): Promise<boolean> {
+export async function enableBiometricLogin(email: string, password: string, skipAuth: boolean = false): Promise<boolean> {
   if (isWeb()) {
     Alert.alert(
       'Not Available',
@@ -107,23 +160,29 @@ export async function enableBiometricLogin(email: string, password: string): Pro
       return false;
     }
 
-    // Authenticate before storing credentials
-    const authenticated = await authenticateWithBiometrics();
-    
-    if (!authenticated) {
-      Alert.alert('Authentication Failed', 'Biometric authentication was not successful.');
-      return false;
+    // Only authenticate if not skipping (e.g., when updating existing credentials)
+    if (!skipAuth) {
+      const authenticated = await authenticateWithBiometrics();
+      
+      if (!authenticated) {
+        Alert.alert('Authentication Failed', 'Biometric authentication was not successful.');
+        return false;
+      }
     }
 
     // Store credentials securely
     await SecureStore.setItemAsync(STORED_EMAIL_KEY, email);
     await SecureStore.setItemAsync(STORED_PASSWORD_KEY, password);
     await SecureStore.setItemAsync(BIOMETRIC_ENABLED_KEY, 'true');
+    
+    console.log(`✅ Credentials stored for ${email}`);
 
     return true;
   } catch (error) {
     console.error('Error enabling biometric login:', error);
-    Alert.alert('Error', 'Failed to enable biometric login.');
+    if (!skipAuth) {
+      Alert.alert('Error', 'Failed to enable biometric login.');
+    }
     return false;
   }
 }
@@ -163,6 +222,24 @@ export async function isBiometricLoginEnabled(): Promise<boolean> {
 }
 
 /**
+ * Get the stored email without requiring biometric authentication
+ * Useful for checking if stored credentials match current user
+ */
+export async function getStoredEmail(): Promise<string | null> {
+  if (isWeb()) {
+    return null;
+  }
+  
+  try {
+    return await SecureStore.getItemAsync(STORED_EMAIL_KEY);
+  } catch (error) {
+    console.error('Error getting stored email:', error);
+    return null;
+  }
+}
+
+/**
+ * 
  * Get stored credentials after biometric authentication
  */
 export async function getStoredCredentials(): Promise<{ email: string; password: string } | null> {
@@ -174,6 +251,7 @@ export async function getStoredCredentials(): Promise<{ email: string; password:
     const enabled = await isBiometricLoginEnabled();
     
     if (!enabled) {
+      console.log("🔐 Biometric not enabled, no credentials to retrieve");
       return null;
     }
 
@@ -181,6 +259,7 @@ export async function getStoredCredentials(): Promise<{ email: string; password:
     const authenticated = await authenticateWithBiometrics();
     
     if (!authenticated) {
+      console.log("🔐 Biometric authentication cancelled or failed");
       return null;
     }
 
@@ -189,9 +268,12 @@ export async function getStoredCredentials(): Promise<{ email: string; password:
     const password = await SecureStore.getItemAsync(STORED_PASSWORD_KEY);
 
     if (!email || !password) {
+      console.log("⚠️ Biometric enabled but credentials not found - clearing biometric data");
+      await disableBiometricLogin();
       return null;
     }
 
+    console.log("✅ Retrieved stored credentials for:", email);
     return { email, password };
   } catch (error) {
     console.error('Error retrieving stored credentials:', error);
