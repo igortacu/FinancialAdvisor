@@ -12,7 +12,8 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Pick a receipt photo to parse",
-        "NSCameraUsageDescription": "Scan receipts with the camera"
+        "NSCameraUsageDescription": "Scan receipts with the camera",
+        "NSFaceIDUsageDescription": "Use Face ID to quickly and securely sign you into your account"
       }
     },
     "android": {
@@ -22,7 +23,10 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "permissions": ["READ_MEDIA_IMAGES", "CAMERA"],
+      "permissions": [
+        "READ_MEDIA_IMAGES",
+        "CAMERA"
+      ],
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
@@ -43,7 +47,8 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

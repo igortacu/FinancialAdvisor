@@ -15,17 +15,28 @@ import { supabase } from "@/api";
 import { useAuth } from "@/store/auth";
 import { getRedirectTo } from "@/lib/authRedirect";
 import { upsertProfile, getProfile } from "@/lib/profile";
+import { 
+  isBiometricLoginEnabled, 
+  getStoredCredentials,
+  getBiometricType,
+  isBiometricSupported,
+  enableBiometricLogin,
+  getStoredEmail,
+  disableBiometricLogin
+} from "@/lib/biometric";
 
 type Screen = "welcome" | "register" | "login";
 
 export default function AuthScreen(): React.ReactElement {
-  const { setUser } = useAuth();
+  const { user, setUser, isLoading: authLoading } = useAuth();
   const [screen, setScreen] = useState<Screen>("welcome");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [surname, setSurname] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [hasBiometricTriggered, setHasBiometricTriggered] = useState(false);
   const [secure, setSecure] = useState(true);
 
   const { height, width } = useWindowDimensions();
@@ -42,34 +53,148 @@ export default function AuthScreen(): React.ReactElement {
     return "Financial Advisor";
   }, [screen]);
 
-  // session resume (OAuth returns here)
+  // If user is already logged in, redirect to tabs
   useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Store/update profile in database (OAuth provides name in metadata)
-      await upsertProfile();
-      
-      // Fetch profile from database
-      const profile = await getProfile(user.id);
-
-      setUser({
-        id: user.id,
-        email: user.email ?? "",
-        name: profile?.name ?? user.user_metadata?.name ?? null,
-        avatarUrl: user.user_metadata?.avatar_url ?? null,
-      });
+    if (!authLoading && user) {
       router.replace("/(tabs)");
+    }
+  }, [user, authLoading]);
+
+  // Check if biometric login is available and auto-trigger if enabled
+  useEffect(() => {
+    // Only run once when auth is initialized and there's no user
+    if (authLoading || user || hasBiometricTriggered) return;
+    
+    (async () => {
+      const enabled = await isBiometricLoginEnabled();
+      if (enabled) {
+        const type = await getBiometricType();
+        
+        // Mark as triggered to prevent multiple attempts
+        setHasBiometricTriggered(true);
+        
+  // Auto-trigger biometric login (slight delay for better reliability)
+  console.log(`🔐 ${type} login enabled - auto-triggering`);
+  setTimeout(() => handleBiometricLogin(), 800);
+      }
     })();
-  }, []);
+  }, [authLoading, user, hasBiometricTriggered]);
+
+  async function handleBiometricLogin() {
+    // Prevent multiple simultaneous biometric prompts
+    if (isLoading) {
+      console.log("⚠️ Biometric login already in progress");
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      console.log("🔵 Requesting biometric authentication...");
+      const credentials = await getStoredCredentials();
+      
+      if (!credentials) {
+        console.log("❌ No credentials returned - user may have cancelled or Face ID failed");
+        setIsLoading(false);
+        return; // User cancelled - don't show error
+      }
+
+      console.log("🔵 Attempting biometric login for:", credentials.email);
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: credentials.email,
+        password: credentials.password
+      });
+      
+      if (error) {
+        console.error("❌ Biometric login error:", error);
+        
+        // If credentials are wrong, disable biometric and clear stored data
+        if (error.message.includes("Invalid login credentials")) {
+          console.log("⚠️ Stored credentials are invalid - disabling biometric");
+          const { disableBiometricLogin } = await import("@/lib/biometric");
+          await disableBiometricLogin();
+          Alert.alert(
+            "Face ID Disabled",
+            "Your stored credentials are no longer valid. Please login with your email and password to re-enable Face ID."
+          );
+        } else {
+          Alert.alert(
+            "Login Failed",
+            "Unable to sign in with biometric. Please try again or use password."
+          );
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      if (!data.user || !data.session) {
+        throw new Error("Login failed - no user or session returned");
+      }
+
+      console.log("✅ Biometric login successful!");
+
+      // Fetch profile from database
+      const profile = await getProfile(data.user.id);
+      
+      setUser({
+        id: data.user.id,
+        email: data.user.email ?? credentials.email,
+        name: profile?.name ?? data.user.user_metadata?.name ?? null,
+        avatarUrl: data.user.user_metadata?.avatar_url ?? null,
+      });
+      
+      router.replace("/(tabs)");
+    } catch (err: any) {
+      console.error("❌ Biometric login error:", err);
+      Alert.alert("Login Failed", err?.message ?? "Biometric login failed");
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   async function signInWithGoogle() {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo },
-    });
-    if (error) Alert.alert("Google Sign-in failed", error.message);
+    // Prevent multiple simultaneous calls
+    if (isGoogleLoading) {
+      console.log("⚠️ Google sign-in already in progress");
+      return;
+    }
+    
+    try {
+      setIsGoogleLoading(true);
+      setIsLoading(true);
+      const redirectUri = getRedirectTo();
+      console.log("🔄 OAuth redirect URI:", redirectUri);
+      
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: redirectUri,
+          skipBrowserRedirect: Platform.OS === "web" ? false : true,
+          queryParams: {
+            access_type: "offline",
+            prompt: "consent",
+          },
+        },
+      });
+      
+      if (error) {
+        console.error("❌ Google Sign-in error:", error);
+        Alert.alert(
+          "Google Sign-in Failed",
+          `${error.message}\n\nMake sure you're connected to the internet and try again.`
+        );
+      }
+    } catch (err: any) {
+      console.error("❌ Unexpected error during Google sign-in:", err);
+      Alert.alert(
+        "Sign-in Error",
+        "An unexpected error occurred. Please try again."
+      );
+    } finally {
+      setIsLoading(false);
+      // Add delay before allowing another attempt
+      setTimeout(() => setIsGoogleLoading(false), 2000);
+    }
   }
 
   async function handleRegister() {
@@ -165,12 +290,55 @@ export default function AuthScreen(): React.ReactElement {
           avatarUrl: data.user.user_metadata?.avatar_url ?? null,
         });
         
-        setEmail("");
-        setPassword("");
-        setName("");
-        setSurname("");
+        // Check if biometric is available
+        const biometricSupported = await isBiometricSupported();
         
-        router.replace("/(tabs)");
+        if (biometricSupported) {
+          const biometricType = await getBiometricType();
+          // Ask user if they want to enable biometric login
+          Alert.alert(
+            `Enable ${biometricType}?`,
+            `Would you like to use ${biometricType} to sign in? This will allow you to sign in without entering your password.`,
+            [
+              {
+                text: "Not Now",
+                style: "cancel",
+                onPress: () => {
+                  setEmail("");
+                  setPassword("");
+                  setName("");
+                  setSurname("");
+                  router.replace("/(tabs)");
+                }
+              },
+              {
+                text: "Enable",
+                onPress: async () => {
+                  console.log(`🔐 Enabling ${biometricType}...`);
+                  const success = await enableBiometricLogin(e, p);
+                  if (success) {
+                    console.log(`✅ ${biometricType} enabled successfully`);
+                    Alert.alert(
+                      "Success",
+                      `${biometricType} has been enabled. Next time you can sign in with just your face!`
+                    );
+                  }
+                  setEmail("");
+                  setPassword("");
+                  setName("");
+                  setSurname("");
+                  router.replace("/(tabs)");
+                }
+              }
+            ]
+          );
+        } else {
+          setEmail("");
+          setPassword("");
+          setName("");
+          setSurname("");
+          router.replace("/(tabs)");
+        }
       }
     } catch (err: any) {
       console.error("❌ Registration error:", err);
@@ -240,9 +408,107 @@ export default function AuthScreen(): React.ReactElement {
       
       console.log("✅ User state updated, redirecting to app");
       
-      setEmail("");
-      setPassword("");
-      router.replace("/(tabs)");
+      // Check if biometric is available and not already enabled
+      const biometricEnabled = await isBiometricLoginEnabled();
+      const biometricSupported = await isBiometricSupported();
+      
+      console.log(`🔐 Biometric check - Enabled: ${biometricEnabled}, Supported: ${biometricSupported}`);
+      
+      // If biometric is enabled, check if the stored email matches current login
+      if (biometricEnabled) {
+        const storedEmail = await getStoredEmail();
+        console.log(`🔐 Stored email: ${storedEmail}, Current email: ${e}`);
+        
+        if (storedEmail && storedEmail !== e) {
+          // Different account - ask to update Face ID
+          console.log("⚠️ Different account detected - clearing old Face ID data");
+          await disableBiometricLogin();
+          
+          const biometricType = await getBiometricType();
+          Alert.alert(
+            `Update ${biometricType}?`,
+            `You're logging in with a different account (${e}). Would you like to enable ${biometricType} for this account?`,
+            [
+              {
+                text: "Not Now",
+                style: "cancel",
+                onPress: () => {
+                  setEmail("");
+                  setPassword("");
+                  router.replace("/(tabs)");
+                }
+              },
+              {
+                text: "Enable",
+                onPress: async () => {
+                  console.log(`🔐 Enabling ${biometricType} for new account...`);
+                  const success = await enableBiometricLogin(e, p);
+                  if (success) {
+                    console.log(`✅ ${biometricType} enabled for ${e}`);
+                    Alert.alert("Success", `${biometricType} has been enabled for your account!`);
+                  }
+                  setEmail("");
+                  setPassword("");
+                  router.replace("/(tabs)");
+                }
+              }
+            ]
+          );
+          return;
+        } else if (storedEmail === e) {
+          // Same account - update password silently in case it changed
+          console.log("🔐 Same account - updating stored credentials silently");
+          await enableBiometricLogin(e, p, true); // Skip Face ID prompt when updating
+          setEmail("");
+          setPassword("");
+          router.replace("/(tabs)");
+          return;
+        }
+      }
+      
+      if (!biometricEnabled && biometricSupported) {
+        const biometricType = await getBiometricType();
+        console.log(`🔐 Showing ${biometricType} enable prompt...`);
+        // Ask user if they want to enable biometric login
+        Alert.alert(
+          `Enable ${biometricType}?`,
+          `Would you like to use ${biometricType} to sign in next time? This will allow you to sign in without entering your password.`,
+          [
+            {
+              text: "Not Now",
+              style: "cancel",
+              onPress: () => {
+                setEmail("");
+                setPassword("");
+                router.replace("/(tabs)");
+              }
+            },
+            {
+              text: "Enable",
+              onPress: async () => {
+                console.log(`🔐 Enabling ${biometricType}...`);
+                const success = await enableBiometricLogin(e, p);
+                if (success) {
+                  console.log(`✅ ${biometricType} enabled successfully`);
+                  Alert.alert(
+                    "Success",
+                    `${biometricType} has been enabled. Next time you can sign in with just your face!`
+                  );
+                } else {
+                  console.log(`❌ Failed to enable ${biometricType}`);
+                }
+                setEmail("");
+                setPassword("");
+                router.replace("/(tabs)");
+              }
+            }
+          ]
+        );
+      } else {
+        setEmail("");
+        setPassword("");
+        router.replace("/(tabs)");
+      }
     } catch (err: any) {
       console.error("❌ Login error:", err);
       const msg = String(err?.message ?? "Login failed");
