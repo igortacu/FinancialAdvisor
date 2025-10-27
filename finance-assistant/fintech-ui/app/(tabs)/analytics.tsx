@@ -12,6 +12,8 @@ import {
   Platform,
   Dimensions,
   UIManager, // Added UIManager import
+  TextInput,
+  Switch,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInUp } from "react-native-reanimated";
@@ -178,14 +180,24 @@ function BreakdownRow({
   amount,
   total,
   currency,
+  budget,
 }: {
   color: string;
   label: string;
   amount: number;
   total: number;
   currency: string;
+  budget?: number;
 }) {
   const pct = (amount / total) * 100;
+  const usagePctOfBudget = budget ? (amount / budget) * 100 : undefined;
+  const alert =
+    budget && amount >= budget
+      ? { text: "Over budget", type: "danger" as const }
+      : budget && amount >= budget * 0.8
+      ? { text: `${Math.round(usagePctOfBudget!)}% used`, type: "warning" as const }
+      : null;
+
   return (
     <View style={s.statItemEnhanced}>
       <View style={s.statHeader}>
@@ -193,12 +205,22 @@ function BreakdownRow({
           <View style={[s.legendDot, { backgroundColor: color }]} />
           <Text style={s.statLabel}>{label}</Text>
         </View>
-        <Text style={s.statAmount}>{formatMoney(amount, currency)}</Text>
+        <View style={{ alignItems: "flex-end" }}>
+          <Text style={s.statAmount}>{formatMoney(amount, currency)}</Text>
+          {budget != null ? (
+            <Text style={s.budgetHint}>Budget: {formatMoney(budget, currency)}</Text>
+          ) : null}
+        </View>
       </View>
       <View style={s.progressBar}>
         <View style={[s.progressFill, { backgroundColor: color, width: `${pct}%` }]} />
       </View>
-      <Text style={s.statPercent}>{pct.toFixed(0)}% of total</Text>
+      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+        <Text style={s.statPercent}>{pct.toFixed(0)}% of total</Text>
+        {alert ? (
+          <Text style={alert.type === "danger" ? s.alertDanger : s.alertWarning}>{alert.text}</Text>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -362,6 +384,31 @@ export default function Analytics() {
   const [received7d] = React.useState(3810);
   const [receivedTransactions] = React.useState(received7dList);
 
+  // Budgets and carryover
+  const [budgets, setBudgets] = React.useState({ needs: 1600, wants: 900, savings: 600 });
+  const [carryover, setCarryover] = React.useState(true);
+
+  const budgetByMonth = React.useMemo(() => {
+    const res: Record<string, { needs: number; wants: number; savings: number }> = {};
+    let carry = { needs: 0, wants: 0, savings: 0 };
+    for (const m of fallbackMonthly) {
+      const available = {
+        needs: budgets.needs + (carryover ? carry.needs : 0),
+        wants: budgets.wants + (carryover ? carry.wants : 0),
+        savings: budgets.savings + (carryover ? carry.savings : 0),
+      };
+      res[m.month] = available;
+
+      // Carry forward only leftover (no debt carry)
+      carry = {
+        needs: Math.max(available.needs - m.needs, 0),
+        wants: Math.max(available.wants - m.wants, 0),
+        savings: Math.max(available.savings - m.savings, 0),
+      };
+    }
+    return res;
+  }, [budgets, carryover]);
+
   const filteredMonthlyData =
     selectedMonth === "All"
       ? fallbackMonthly
@@ -388,7 +435,45 @@ export default function Analytics() {
   const xMax = Math.max(...forecastData.map((p) => p.day));
   const rawYMax = Math.max(...forecastData.map((p) => p.y));
   const yMax = Math.ceil((rawYMax * 1.15) / 100) * 100 || 2500;
-  
+
+  // Helpers for budget editing
+  const setBudget = (key: "needs" | "wants" | "savings", v: string) => {
+    const n = Math.max(0, Number(v.replace(/[^\d.]/g, "")) || 0);
+    setBudgets((b) => ({ ...b, [key]: n }));
+  };
+
+  // Alerts for selected month (quick summary pills)
+  const selectedMonthBudgets =
+    selectedMonth !== "All" ? budgetByMonth[selectedMonth] : undefined;
+  const selectedMonthSpend =
+    selectedMonth !== "All" ? filteredMonthlyData[0] : undefined;
+  const monthAlerts =
+    selectedMonthBudgets && selectedMonthSpend
+      ? ( [
+          {
+            label: "Needs",
+            spent: selectedMonthSpend.needs,
+            budget: selectedMonthBudgets.needs,
+          },
+          {
+            label: "Wants",
+            spent: selectedMonthSpend.wants,
+            budget: selectedMonthBudgets.wants,
+          },
+          {
+            label: "Savings",
+            spent: selectedMonthSpend.savings,
+            budget: selectedMonthBudgets.savings,
+          },
+        ] as const)
+          .map((x) => {
+            if (x.spent >= x.budget) return { label: x.label, type: "danger" as const, text: "Over budget" };
+            if (x.spent >= x.budget * 0.8) return { label: x.label, type: "warning" as const, text: "80%+ used" };
+            return null;
+          })
+          .filter(Boolean)
+      : [];
+
   return (
     <ScrollView
       style={[s.root, { paddingTop: insets.top + 6 }]}
@@ -518,6 +603,65 @@ export default function Analytics() {
                 />
               </View>
 
+              {/* Budget controls */}
+              <View style={s.budgetControls}>
+                <View style={s.budgetRow}>
+                  <View style={s.budgetItem}>
+                    <View style={[s.legendDot, { backgroundColor: "#EF4444" }]} />
+                    <Text style={s.budgetLabel}>Needs</Text>
+                    <TextInput
+                      style={s.budgetInput}
+                      keyboardType="numeric"
+                      value={String(budgets.needs)}
+                      onChangeText={(t) => setBudget("needs", t)}
+                      placeholder="0"
+                    />
+                  </View>
+                  <View style={s.budgetItem}>
+                    <View style={[s.legendDot, { backgroundColor: "#F59E0B" }]} />
+                    <Text style={s.budgetLabel}>Wants</Text>
+                    <TextInput
+                      style={s.budgetInput}
+                      keyboardType="numeric"
+                      value={String(budgets.wants)}
+                      onChangeText={(t) => setBudget("wants", t)}
+                      placeholder="0"
+                    />
+                  </View>
+                  <View style={s.budgetItem}>
+                    <View style={[s.legendDot, { backgroundColor: "#10B981" }]} />
+                    <Text style={s.budgetLabel}>Savings</Text>
+                    <TextInput
+                      style={s.budgetInput}
+                      keyboardType="numeric"
+                      value={String(budgets.savings)}
+                      onChangeText={(t) => setBudget("savings", t)}
+                      placeholder="0"
+                    />
+                  </View>
+                </View>
+                <View style={s.carryoverRow}>
+                  <Text style={s.carryoverLabel}>Carryover unused budget</Text>
+                  <Switch value={carryover} onValueChange={setCarryover} />
+                </View>
+              </View>
+
+              {/* Month alerts (selected month only) */}
+              {selectedMonth !== "All" && monthAlerts && monthAlerts.length > 0 ? (
+                <View style={s.alertsRow}>
+                  {monthAlerts.map((a, idx) => (
+                    <View
+                      key={`${a!.label}-${idx}`}
+                      style={[s.alertPill, a!.type === "danger" ? s.alertPillDanger : s.alertPillWarning]}
+                    >
+                      <Text style={s.alertPillText}>
+                        {a!.label}: {a!.text}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
               {loadingAgg ? (
                 <ActivityIndicator />
               ) : (
@@ -569,6 +713,26 @@ export default function Analytics() {
                             style={{ data: { fill: "#10B981", fillOpacity: 0.9, stroke: "#059669", strokeWidth: 1 } }}
                           />
                         </VictoryGroup>
+
+                        {/* Budget reference lines */}
+                        <VictoryLine
+                          data={fallbackMonthly.map((m) => ({ month: m.month, amount: budgets.needs }))}
+                          x="month"
+                          y="amount"
+                          style={{ data: { stroke: "#EF4444", strokeDasharray: "6,4", strokeWidth: 2, opacity: 0.8 } }}
+                        />
+                        <VictoryLine
+                          data={fallbackMonthly.map((m) => ({ month: m.month, amount: budgets.wants }))}
+                          x="month"
+                          y="amount"
+                          style={{ data: { stroke: "#F59E0B", strokeDasharray: "6,4", strokeWidth: 2, opacity: 0.8 } }}
+                        />
+                        <VictoryLine
+                          data={fallbackMonthly.map((m) => ({ month: m.month, amount: budgets.savings }))}
+                          x="month"
+                          y="amount"
+                          style={{ data: { stroke: "#10B981", strokeDasharray: "6,4", strokeWidth: 2, opacity: 0.8 } }}
+                        />
                       </VictoryChart>
                     ) : (
                       <VictoryChart
@@ -633,6 +797,7 @@ export default function Analytics() {
                   <View style={{ marginTop: 20, gap: 16 }}>
                     {filteredMonthlyData.map((m) => {
                       const total = m.needs + m.wants + m.savings || 1;
+                      const avail = budgetByMonth[m.month] || { needs: budgets.needs, wants: budgets.wants, savings: budgets.savings };
                       return (
                         <View key={m.month} style={s.monthlyBreakdown}>
                           <View style={s.monthlyHeader}>
@@ -640,9 +805,9 @@ export default function Analytics() {
                             <Text style={s.monthTotal}>Total: {formatMoney(total, currency)}</Text>
                           </View>
 
-                          <BreakdownRow color="#EF4444" label="Needs" amount={m.needs} total={total} currency={currency} />
-                          <BreakdownRow color="#F59E0B" label="Wants" amount={m.wants} total={total} currency={currency} />
-                          <BreakdownRow color="#10B981" label="Savings" amount={m.savings} total={total} currency={currency} />
+                          <BreakdownRow color="#EF4444" label="Needs" amount={m.needs} total={total} currency={currency} budget={avail.needs} />
+                          <BreakdownRow color="#F59E0B" label="Wants" amount={m.wants} total={total} currency={currency} budget={avail.wants} />
+                          <BreakdownRow color="#10B981" label="Savings" amount={m.savings} total={total} currency={currency} budget={avail.savings} />
                         </View>
                       );
                     })}
@@ -1259,4 +1424,79 @@ eventAmount: {
   transactionAmount: { fontWeight: "700", fontSize: 14, marginBottom: 2 },
   transactionDesc: { fontSize: 12, color: "#374151", marginBottom: 2 },
   transactionCategory: { fontSize: 11, color: "#6B7280" },
+
+  // budget controls
+  budgetControls: {
+    marginTop: 8,
+    marginBottom: 8,
+    gap: 8,
+  },
+  budgetRow: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  budgetItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 6,
+  },
+  budgetLabel: { fontSize: 12, color: "#374151", fontWeight: "600" },
+  budgetInput: {
+    minWidth: 70,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 6,
+    fontSize: 12,
+    color: "#111827",
+    backgroundColor: "#F9FAFB",
+    textAlign: "right",
+  },
+  carryoverRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F8FAFC",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 8,
+  },
+  carryoverLabel: { fontSize: 12, color: "#374151", fontWeight: "600" },
+
+  budgetHint: { fontSize: 10, color: "#6B7280" },
+
+  alertsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 8,
+  },
+  alertPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  alertPillWarning: {
+    backgroundColor: "#FFFBEB",
+    borderColor: "#F59E0B",
+  },
+  alertPillDanger: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#EF4444",
+  },
+  alertPillText: { fontSize: 12, fontWeight: "700", color: "#374151" },
+
+  alertWarning: { fontSize: 12, color: "#D97706", fontWeight: "700" },
+  alertDanger: { fontSize: 12, color: "#B91C1C", fontWeight: "700" },
 });
