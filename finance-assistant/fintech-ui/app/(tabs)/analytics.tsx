@@ -46,6 +46,18 @@ function formatMoney(val: number, currency: string) {
   }
 }
 
+// Add month abbreviations (for current-month detection)
+const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"] as const;
+
+// Helper to fetch current month info from device time
+function getCurrentMonth() {
+  const d = new Date();
+  const index = d.getMonth();
+  const abbr = MONTH_ABBR[index];
+  const name = d.toLocaleString(undefined, { month: "long" });
+  return { index, abbr, name };
+}
+
 // ---------- mocked data ----------
 const fallbackMonthly = [
   { month: "Jan", needs: 1200, wants: 700, savings: 400 },
@@ -57,6 +69,10 @@ const fallbackMonthly = [
   { month: "Jul", needs: 1500, wants: 700, savings: 500 },
   { month: "Aug", needs: 1800, wants: 1000, savings: 800 },
   { month: "Sep", needs: 1600, wants: 900, savings: 700 },
+  // Added remaining months so the current month can be selected and edited
+  { month: "Oct", needs: 0, wants: 0, savings: 0 },
+  { month: "Nov", needs: 0, wants: 0, savings: 0 },
+  { month: "Dec", needs: 0, wants: 0, savings: 0 },
 ];
 
 const fallbackCash7d = [
@@ -109,9 +125,6 @@ const received7dList = [
   { amount: 85, description: "Cash Refund", category: "Return" },
   { amount: 200, description: "Family Transfer", category: "Gift" },
 ];
-
-// Add month abbreviations (for current-month detection)
-const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"] as const;
 
 // ---------- small UI ----------
 function KPI({
@@ -393,7 +406,7 @@ export default function Analytics() {
 
   // Determine effective current month based on device date; if absent in data, use last month in data
   const monthsInData = React.useMemo(() => fallbackMonthly.map((m) => m.month), []);
-  const sysMonthName = MONTH_ABBR[new Date().getMonth()];
+  const { abbr: sysMonthName, name: sysMonthLong } = getCurrentMonth();
   const effectiveCurrentMonth = monthsInData.includes(sysMonthName)
     ? sysMonthName
     : monthsInData[monthsInData.length - 1];
@@ -616,6 +629,13 @@ export default function Analytics() {
                   buttonStyle={s.dropdownButton}
                   buttonTextStyle={s.dropdownButtonText}
                 />
+              </View>
+
+              {/* Detected current month note */}
+              <View style={s.currentMonthNote}>
+                <Text style={s.currentMonthText}>
+                  Current month detected: {sysMonthLong} ({sysMonthName})
+                </Text>
               </View>
 
               {/* Budget controls: only enabled for the current month */}
@@ -847,8 +867,22 @@ export default function Analytics() {
                   {/* month breakdown */}
                   <View style={{ marginTop: 20, gap: 16 }}>
                     {filteredMonthlyData.map((m) => {
-                      const total = m.needs + m.wants + m.savings || 1;
-                      const avail = budgetByMonth[m.month] || { needs: budgets.needs, wants: budgets.wants, savings: budgets.savings };
+                      // For the current month, display the editable budgets; for others, use actuals
+                      const isCurrent = m.month === effectiveCurrentMonth;
+                      const displayed = {
+                        needs: isCurrent ? budgets.needs : m.needs,
+                        wants: isCurrent ? budgets.wants : m.wants,
+                        savings: isCurrent ? budgets.savings : m.savings,
+                      };
+                      const total = displayed.needs + displayed.wants + displayed.savings || 1;
+
+                      const avail =
+                        budgetByMonth[m.month] || {
+                          needs: budgets.needs,
+                          wants: budgets.wants,
+                          savings: budgets.savings,
+                        };
+
                       return (
                         <View key={m.month} style={s.monthlyBreakdown}>
                           <View style={s.monthlyHeader}>
@@ -856,9 +890,30 @@ export default function Analytics() {
                             <Text style={s.monthTotal}>Total: {formatMoney(total, currency)}</Text>
                           </View>
 
-                          <BreakdownRow color="#EF4444" label="Needs" amount={m.needs} total={total} currency={currency} budget={avail.needs} />
-                          <BreakdownRow color="#F59E0B" label="Wants" amount={m.wants} total={total} currency={currency} budget={avail.wants} />
-                          <BreakdownRow color="#10B981" label="Savings" amount={m.savings} total={total} currency={currency} budget={avail.savings} />
+                          <BreakdownRow
+                            color="#EF4444"
+                            label="Needs"
+                            amount={displayed.needs}
+                            total={total}
+                            currency={currency}
+                            budget={avail.needs}
+                          />
+                          <BreakdownRow
+                            color="#F59E0B"
+                            label="Wants"
+                            amount={displayed.wants}
+                            total={total}
+                            currency={currency}
+                            budget={avail.wants}
+                          />
+                          <BreakdownRow
+                            color="#10B981"
+                            label="Savings"
+                            amount={displayed.savings}
+                            total={total}
+                            currency={currency}
+                            budget={avail.savings}
+                          />
                         </View>
                       );
                     })}
@@ -1552,6 +1607,16 @@ eventAmount: {
     paddingVertical: 10,
   },
   viewOnlyText: {
+    fontSize: 12,
+    color: "#6B7280",
+    fontWeight: "600",
+  },
+
+  currentMonthNote: {
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  currentMonthText: {
     fontSize: 12,
     color: "#6B7280",
     fontWeight: "600",
