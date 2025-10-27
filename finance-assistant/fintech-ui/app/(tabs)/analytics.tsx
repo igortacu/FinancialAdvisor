@@ -110,6 +110,9 @@ const received7dList = [
   { amount: 200, description: "Family Transfer", category: "Gift" },
 ];
 
+// Add month abbreviations (for current-month detection)
+const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"] as const;
+
 // ---------- small UI ----------
 function KPI({
   label,
@@ -388,31 +391,33 @@ export default function Analytics() {
   const [budgets, setBudgets] = React.useState({ needs: 1600, wants: 900, savings: 600 });
   const [carryover, setCarryover] = React.useState(true);
 
-  const budgetByMonth = React.useMemo(() => {
-    const res: Record<string, { needs: number; wants: number; savings: number }> = {};
-    let carry = { needs: 0, wants: 0, savings: 0 };
-    for (const m of fallbackMonthly) {
-      const available = {
-        needs: budgets.needs + (carryover ? carry.needs : 0),
-        wants: budgets.wants + (carryover ? carry.wants : 0),
-        savings: budgets.savings + (carryover ? carry.savings : 0),
-      };
-      res[m.month] = available;
-
-      // Carry forward only leftover (no debt carry)
-      carry = {
-        needs: Math.max(available.needs - m.needs, 0),
-        wants: Math.max(available.wants - m.wants, 0),
-        savings: Math.max(available.savings - m.savings, 0),
-      };
-    }
-    return res;
-  }, [budgets, carryover]);
+  // Determine effective current month based on device date; if absent in data, use last month in data
+  const monthsInData = React.useMemo(() => fallbackMonthly.map((m) => m.month), []);
+  const sysMonthName = MONTH_ABBR[new Date().getMonth()];
+  const effectiveCurrentMonth = monthsInData.includes(sysMonthName)
+    ? sysMonthName
+    : monthsInData[monthsInData.length - 1];
 
   const filteredMonthlyData =
     selectedMonth === "All"
       ? fallbackMonthly
       : fallbackMonthly.filter((m) => m.month === selectedMonth);
+
+  // Whether the currently selected month is the editable current month
+  const isCurrentMonthSelected =
+    selectedMonth !== "All" && selectedMonth === effectiveCurrentMonth;
+
+  // Data for "All" view: replace current month's bars with editable budgets, keep others as actuals
+  const monthlyDataWithCurrentBudget = React.useMemo(
+    () =>
+      fallbackMonthly.map((m) => ({
+        month: m.month,
+        needs: m.month === effectiveCurrentMonth ? budgets.needs : m.needs,
+        wants: m.month === effectiveCurrentMonth ? budgets.wants : m.wants,
+        savings: m.month === effectiveCurrentMonth ? budgets.savings : m.savings,
+      })),
+    [budgets, effectiveCurrentMonth]
+  );
 
   const pieChartData = React.useMemo(() => {
     const total = spentNeeds + spentWants + spentSavings || 1;
@@ -442,14 +447,24 @@ export default function Analytics() {
     setBudgets((b) => ({ ...b, [key]: n }));
   };
 
-  // Alerts for selected month (quick summary pills)
-  const selectedMonthBudgets =
-    selectedMonth !== "All" ? budgetByMonth[selectedMonth] : undefined;
-  const selectedMonthSpend =
-    selectedMonth !== "All" ? filteredMonthlyData[0] : undefined;
-  const monthAlerts =
-    selectedMonthBudgets && selectedMonthSpend
-      ? ( [
+    // Alerts for selected month (quick summary pills)
+  
+  // Map each month to its budget; use the current editable budgets for all months
+  const budgetByMonth = React.useMemo(() => {
+    const map: Record<string, { needs: number; wants: number; savings: number }> = {};
+    fallbackMonthly.forEach((m) => {
+      map[m.month] = { needs: budgets.needs, wants: budgets.wants, savings: budgets.savings };
+    });
+    return map;
+  }, [budgets]);
+  
+    const selectedMonthBudgets =
+      selectedMonth !== "All" ? budgetByMonth[selectedMonth] : undefined;
+    const selectedMonthSpend =
+      selectedMonth !== "All" ? filteredMonthlyData[0] : undefined;
+    const monthAlerts =
+      selectedMonthBudgets && selectedMonthSpend
+        ? ( [
           {
             label: "Needs",
             spent: selectedMonthSpend.needs,
@@ -603,48 +618,59 @@ export default function Analytics() {
                 />
               </View>
 
-              {/* Budget controls */}
-              <View style={s.budgetControls}>
-                <View style={s.budgetRow}>
-                  <View style={s.budgetItem}>
-                    <View style={[s.legendDot, { backgroundColor: "#EF4444" }]} />
-                    <Text style={s.budgetLabel}>Needs</Text>
-                    <TextInput
-                      style={s.budgetInput}
-                      keyboardType="numeric"
-                      value={String(budgets.needs)}
-                      onChangeText={(t) => setBudget("needs", t)}
-                      placeholder="0"
-                    />
+              {/* Budget controls: only enabled for the current month */}
+              {isCurrentMonthSelected ? (
+                <View style={s.budgetControls}>
+                  <View style={s.budgetRow}>
+                    <View style={s.budgetItem}>
+                      <View style={[s.legendDot, { backgroundColor: "#EF4444" }]} />
+                      <Text style={s.budgetLabel}>Needs</Text>
+                      <TextInput
+                        style={s.budgetInput}
+                        keyboardType="numeric"
+                        value={String(budgets.needs)}
+                        onChangeText={(t) => setBudget("needs", t)}
+                        placeholder="0"
+                        editable
+                      />
+                    </View>
+                    <View style={s.budgetItem}>
+                      <View style={[s.legendDot, { backgroundColor: "#F59E0B" }]} />
+                      <Text style={s.budgetLabel}>Wants</Text>
+                      <TextInput
+                        style={s.budgetInput}
+                        keyboardType="numeric"
+                        value={String(budgets.wants)}
+                        onChangeText={(t) => setBudget("wants", t)}
+                        placeholder="0"
+                        editable
+                      />
+                    </View>
+                    <View style={s.budgetItem}>
+                      <View style={[s.legendDot, { backgroundColor: "#10B981" }]} />
+                      <Text style={s.budgetLabel}>Savings</Text>
+                      <TextInput
+                        style={s.budgetInput}
+                        keyboardType="numeric"
+                        value={String(budgets.savings)}
+                        onChangeText={(t) => setBudget("savings", t)}
+                        placeholder="0"
+                        editable
+                      />
+                    </View>
                   </View>
-                  <View style={s.budgetItem}>
-                    <View style={[s.legendDot, { backgroundColor: "#F59E0B" }]} />
-                    <Text style={s.budgetLabel}>Wants</Text>
-                    <TextInput
-                      style={s.budgetInput}
-                      keyboardType="numeric"
-                      value={String(budgets.wants)}
-                      onChangeText={(t) => setBudget("wants", t)}
-                      placeholder="0"
-                    />
-                  </View>
-                  <View style={s.budgetItem}>
-                    <View style={[s.legendDot, { backgroundColor: "#10B981" }]} />
-                    <Text style={s.budgetLabel}>Savings</Text>
-                    <TextInput
-                      style={s.budgetInput}
-                      keyboardType="numeric"
-                      value={String(budgets.savings)}
-                      onChangeText={(t) => setBudget("savings", t)}
-                      placeholder="0"
-                    />
+                  <View style={s.carryoverRow}>
+                    <Text style={s.carryoverLabel}>Carryover unused budget</Text>
+                    <Switch value={carryover} onValueChange={setCarryover} />
                   </View>
                 </View>
-                <View style={s.carryoverRow}>
-                  <Text style={s.carryoverLabel}>Carryover unused budget</Text>
-                  <Switch value={carryover} onValueChange={setCarryover} />
+              ) : (
+                <View style={s.viewOnlyNote}>
+                  <Text style={s.viewOnlyText}>
+                    Budgets are editable for {effectiveCurrentMonth} only. Select {effectiveCurrentMonth} to adjust.
+                  </Text>
                 </View>
-              </View>
+              )}
 
               {/* Month alerts (selected month only) */}
               {selectedMonth !== "All" && monthAlerts && monthAlerts.length > 0 ? (
@@ -692,21 +718,21 @@ export default function Analytics() {
                         />
                         <VictoryGroup offset={18}>
                           <VictoryBar
-                            data={fallbackMonthly}
+                            data={monthlyDataWithCurrentBudget}
                             x="month"
                             y="needs"
                             barWidth={14}
                             style={{ data: { fill: "#EF4444", fillOpacity: 0.9, stroke: "#DC2626", strokeWidth: 1 } }}
                           />
                           <VictoryBar
-                            data={fallbackMonthly}
+                            data={monthlyDataWithCurrentBudget}
                             x="month"
                             y="wants"
                             barWidth={14}
                             style={{ data: { fill: "#F59E0B", fillOpacity: 0.9, stroke: "#D97706", strokeWidth: 1 } }}
                           />
                           <VictoryBar
-                            data={fallbackMonthly}
+                            data={monthlyDataWithCurrentBudget}
                             x="month"
                             y="savings"
                             barWidth={14}
@@ -714,24 +740,24 @@ export default function Analytics() {
                           />
                         </VictoryGroup>
 
-                        {/* Budget reference lines */}
+                        {/* Budget reference lines that move with inputs */}
                         <VictoryLine
-                          data={fallbackMonthly.map((m) => ({ month: m.month, amount: budgets.needs }))}
+                          data={monthlyDataWithCurrentBudget.map((m) => ({ month: m.month, amount: budgets.needs }))}
                           x="month"
                           y="amount"
-                          style={{ data: { stroke: "#EF4444", strokeDasharray: "6,4", strokeWidth: 2, opacity: 0.8 } }}
+                          style={{ data: { stroke: "#EF4444", strokeDasharray: "6,4", strokeWidth: 2, opacity: 0.85 } }}
                         />
                         <VictoryLine
-                          data={fallbackMonthly.map((m) => ({ month: m.month, amount: budgets.wants }))}
+                          data={monthlyDataWithCurrentBudget.map((m) => ({ month: m.month, amount: budgets.wants }))}
                           x="month"
                           y="amount"
-                          style={{ data: { stroke: "#F59E0B", strokeDasharray: "6,4", strokeWidth: 2, opacity: 0.8 } }}
+                          style={{ data: { stroke: "#F59E0B", strokeDasharray: "6,4", strokeWidth: 2, opacity: 0.85 } }}
                         />
                         <VictoryLine
-                          data={fallbackMonthly.map((m) => ({ month: m.month, amount: budgets.savings }))}
+                          data={monthlyDataWithCurrentBudget.map((m) => ({ month: m.month, amount: budgets.savings }))}
                           x="month"
                           y="amount"
-                          style={{ data: { stroke: "#10B981", strokeDasharray: "6,4", strokeWidth: 2, opacity: 0.8 } }}
+                          style={{ data: { stroke: "#10B981", strokeDasharray: "6,4", strokeWidth: 2, opacity: 0.85 } }}
                         />
                       </VictoryChart>
                     ) : (
@@ -758,22 +784,47 @@ export default function Analytics() {
                           }}
                         />
                         <VictoryGroup offset={40}>
+                          {/*
+                            If current month is selected, use the editable budgets in the bars,
+                            otherwise show historical actuals.
+                          */}
                           <VictoryBar
-                            data={[{ month: selectedMonth, amount: filteredMonthlyData[0]?.needs || 0 }]}
+                            data={[
+                              {
+                                month: selectedMonth,
+                                amount: isCurrentMonthSelected
+                                  ? budgets.needs
+                                  : (filteredMonthlyData[0]?.needs || 0),
+                              },
+                            ]}
                             x="month"
                             y="amount"
                             barWidth={30}
                             style={{ data: { fill: "#EF4444", fillOpacity: 0.9, stroke: "#DC2626", strokeWidth: 2 } }}
                           />
                           <VictoryBar
-                            data={[{ month: selectedMonth, amount: filteredMonthlyData[0]?.wants || 0 }]}
+                            data={[
+                              {
+                                month: selectedMonth,
+                                amount: isCurrentMonthSelected
+                                  ? budgets.wants
+                                  : (filteredMonthlyData[0]?.wants || 0),
+                              },
+                            ]}
                             x="month"
                             y="amount"
                             barWidth={30}
                             style={{ data: { fill: "#F59E0B", fillOpacity: 0.9, stroke: "#D97706", strokeWidth: 2 } }}
                           />
                           <VictoryBar
-                            data={[{ month: selectedMonth, amount: filteredMonthlyData[0]?.savings || 0 }]}
+                            data={[
+                              {
+                                month: selectedMonth,
+                                amount: isCurrentMonthSelected
+                                  ? budgets.savings
+                                  : (filteredMonthlyData[0]?.savings || 0),
+                              },
+                            ]}
                             x="month"
                             y="amount"
                             barWidth={30}
@@ -860,7 +911,8 @@ export default function Analytics() {
                     ))}
                   </View>
                 </>
-              )}
+              )
+              }
             </Card>
           </Animated.View>
 {/* Cash Flow Forecast (30/90 days)  */}
@@ -941,6 +993,7 @@ export default function Analytics() {
         {/* Confidence Band */}
         <VictoryArea
           data={forecastPeriod === "30" ? confidence30d : confidence90d}
+          x="day"
           style={{
             data: { 
               fill: "#E5EDFF", 
@@ -968,9 +1021,11 @@ export default function Analytics() {
           }}
         />
 
-        {/* Projected Balance Line */}
+        {/* Projected Balance Line (fix dataset + map x) */}
         <VictoryLine
-          data={forecastPeriod === "90" ? forecast30d : forecast90d}
+          data={forecastPeriod === "30" ? forecast30d : forecast90d}
+          x="day"
+          y="y"
           style={{
             data: { 
               stroke: "#246BFD", 
@@ -980,9 +1035,11 @@ export default function Analytics() {
           }}
         />
 
-        {/* Balance Data Points */}
+        {/* Balance Data Points (map x/y) */}
         <VictoryScatter
           data={forecastPeriod === "30" ? forecast30d : forecast90d}
+          x="day"
+          y="y"
           size={4}
           style={{
             data: { 
@@ -993,16 +1050,17 @@ export default function Analytics() {
           }}
         />
 
-        {/* Income Events - Green upward arrows */}
+        {/* Income Events - Green upward arrows (map x/y) */}
         <VictoryScatter
-          data={forecastPeriod === "30" ? 
+          data={
+            forecastPeriod === "30" ? 
             [
               { day: 0, amount: 3850, label: "Salary" },
               { day: 7, amount: 450, label: "Freelance" },
               { day: 14, amount: 3850, label: "Salary" },
               { day: 21, amount: 200, label: "Bonus" },
               { day: 28, amount: 3850, label: "Salary" }
-            ] : 
+            ] :
             [
               { day: 0, amount: 3850, label: "Salary" },
               { day: 14, amount: 450, label: "Freelance" },
@@ -1013,27 +1071,19 @@ export default function Analytics() {
               { day: 84, amount: 3850, label: "Salary" }
             ]
           }
+          x="day"
+          y="amount"
           size={5}
           symbol="triangleUp"
-          style={{
-            data: { 
-              fill: "#10B981",
-              stroke: "#10B981",
-              strokeWidth: 1
-            }
-          }}
+          style={{ data: { fill: "#10B981", stroke: "#10B981", strokeWidth: 1 } }}
           labels={({ datum }: { datum: { amount: number } }) => `+$${datum.amount}`}
-          labelComponent={
-            <VictoryLabel
-              dy={-10}
-              style={{ fontSize: 8, fill: "#10B981", fontWeight: "700" }}
-            />
-          }
+          labelComponent={<VictoryLabel dy={-10} style={{ fontSize: 8, fill: "#10B981", fontWeight: "700" }} />}
         />
 
-        {/* Expense Events - Red downward arrows */}
+        {/* Expense Events - Red downward arrows (map x/y) */}
         <VictoryScatter
-          data={forecastPeriod === "30" ? 
+          data={
+            forecastPeriod === "30" ? 
             [
               { day: 2, amount: 1200, label: "Rent" },
               { day: 5, amount: 320, label: "Utilities" },
@@ -1041,7 +1091,7 @@ export default function Analytics() {
               { day: 16, amount: 150, label: "Insurance" },
               { day: 23, amount: 280, label: "Loan" },
               { day: 27, amount: 180, label: "Membership" }
-            ] : 
+            ] :
             [
               { day: 2, amount: 1200, label: "Rent" },
               { day: 16, amount: 320, label: "Utilities" },
@@ -1057,22 +1107,13 @@ export default function Analytics() {
               { day: 86, amount: 280, label: "Loan" }
             ]
           }
+          x="day"
+          y="amount"
           size={5}
           symbol="triangleDown"
-          style={{
-            data: { 
-              fill: "#EF4444",
-              stroke: "#EF4444",
-              strokeWidth: 1
-            }
-          }}
+          style={{ data: { fill: "#EF4444", stroke: "#EF4444", strokeWidth: 1 } }}
           labels={({ datum }: { datum: { amount: number } }) => `-$${datum.amount}`}
-          labelComponent={
-            <VictoryLabel
-              dy={10}
-              style={{ fontSize: 8, fill: "#EF4444", fontWeight: "700" }}
-            />
-          }
+          labelComponent={<VictoryLabel dy={10} style={{ fontSize: 8, fill: "#EF4444", fontWeight: "700" }} />}
         />
       </VictoryChart>
     </View>
@@ -1499,4 +1540,20 @@ eventAmount: {
 
   alertWarning: { fontSize: 12, color: "#D97706", fontWeight: "700" },
   alertDanger: { fontSize: 12, color: "#B91C1C", fontWeight: "700" },
+
+  viewOnlyNote: {
+    marginTop: 6,
+    marginBottom: 8,
+    backgroundColor: "#F8FAFC",
+    borderColor: "#E2E8F0",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  viewOnlyText: {
+    fontSize: 12,
+    color: "#6B7280",
+    fontWeight: "600",
+  },
 });
