@@ -3,6 +3,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet, Alert,
   ActivityIndicator, Platform, KeyboardAvoidingView,
   useWindowDimensions,
+  ImageBackground,
 } from "react-native";
 import { Colors } from "@/constants/theme";
 import * as AuthSession from "expo-auth-session";
@@ -294,7 +295,7 @@ export default function AuthScreen(): React.ReactElement {
           setPassword("");
           setName("");
           setSurname("");
-          router.replace("/(tabs)");
+          router.replace("./cont.tsx");
         }
       }
     } catch (err: any) {
@@ -492,7 +493,12 @@ export default function AuthScreen(): React.ReactElement {
   };
 
   return (
-    <View style={[styles.screen, { backgroundColor: Colors.light.background }]}>
+    <ImageBackground  
+    source={require("@/assets/images/marm.jpg")}
+    style={[styles.screen, { flex: 1 }]}  
+    resizeMode="cover"
+    >
+    <View style={[styles.screen]}>
       <KeyboardAvoidingView
         style={styles.screen}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -549,7 +555,7 @@ export default function AuthScreen(): React.ReactElement {
 
             {screen === "register" && (
               <Animated.View entering={FadeInUp.duration(300).delay(80)} exiting={FadeOutDown.duration(250)}>
-                <View>
+                <View style = {[styles.inputs]}>
                   <Input icon="person-circle-outline" placeholder="Name (optional)" value={name} onChangeText={setName} autoCapitalize="words" textContentType="name" inputHeight={dyn.inputH} />
                   <Input icon="person-outline" placeholder="Surname (optional)" value={surname} onChangeText={setSurname} autoCapitalize="words" textContentType="familyName" inputHeight={dyn.inputH} />
                   <Input icon="mail-outline" placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" textContentType="emailAddress" inputHeight={dyn.inputH} />
@@ -557,17 +563,14 @@ export default function AuthScreen(): React.ReactElement {
                   <CreateButton isLoading = {isLoading} handleRegister={() => {
                       handleRegister();
                   }}/>
-{/* 
-                  <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={handleRegister} disabled={isLoading}>
-                    {isLoading ? <ActivityIndicator color="#fff" /> : (<><Ionicons name="checkmark-circle" size={18} color="#fff" /><Text style={styles.btnText}>Create account</Text></>)}
-                  </TouchableOpacity> */}
+
                 </View>
               </Animated.View>
             )}
 
             {screen === "login" && (
               <Animated.View entering={FadeInUp.duration(300).delay(80)} exiting={FadeOutDown.duration(250)}>
-                <View>
+                <View style = {[styles.loginInputs]}>
                   <Input icon="mail-outline" placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" textContentType="emailAddress" inputHeight={dyn.inputH} />
                   <Input icon="lock-closed-outline" placeholder="Password" value={password} onChangeText={setPassword} autoCapitalize="none" secureTextEntry={secure} rightIcon={secure ? "eye-outline" : "eye-off-outline"} onRightIconPress={() => setSecure(v => !v)} textContentType="password" inputHeight={dyn.inputH} />
 
@@ -588,5 +591,7 @@ export default function AuthScreen(): React.ReactElement {
         </View>
       </KeyboardAvoidingView>
     </View>
+
+    </ImageBackground>
   );
 }

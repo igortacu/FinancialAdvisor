@@ -4,7 +4,7 @@ import { TouchableOpacity, Text, Platform, Alert, StyleSheet } from "react-nativ
 import { Ionicons } from "@expo/vector-icons";
 import { getRedirectTo } from "@/lib/authRedirect";
 import { supabase } from "@/api";
-
+import styles from "./styles";
 type GoogleLoginProps = {
   setIsLoading: (loading: boolean) => void;
 };
@@ -65,10 +65,3 @@ export default function GoogleLogin({ setIsLoading }: GoogleLoginProps){
             </TouchableOpacity>
     )
 }
-
-const styles = StyleSheet.create({
-    btn: { flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center", paddingVertical: 14, borderRadius: 14, width: "100%", marginTop: 10 },
-    btnGoogle: { backgroundColor: "#ffffff" },
-    btnText: { color: "#fff", fontSize: 16, textAlign: "center", fontWeight: "700" },
-    btnTextDark: { color: "#1e293b" }
-});
