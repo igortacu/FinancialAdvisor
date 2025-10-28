@@ -19,7 +19,6 @@
     "@react-navigation/native": "^7.1.8",
     "@shopify/react-native-skia": "^2.2.12",
     "@supabase/supabase-js": "^2.58.0",
-    "bride": "^0.1.0",
     "cors": "^2.8.5",
     "expo": "~54.0.10",
     "expo-auth-session": "^7.0.8",
