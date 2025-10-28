@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
+  View, Text, TouchableOpacity, StyleSheet, Alert,
   ActivityIndicator, Platform, KeyboardAvoidingView,
   useWindowDimensions,
 } from "react-native";
@@ -10,10 +10,10 @@ import { Ionicons } from "@expo/vector-icons";
 import Animated, { FadeInUp, FadeOutDown } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-
+import Input from "./input";
+import GoogleSignIn from "./signInGoogle"
 import { supabase } from "@/api";
 import { useAuth } from "@/store/auth";
-import { getRedirectTo } from "@/lib/authRedirect";
 import { upsertProfile, getProfile } from "@/lib/profile";
 import { 
   isBiometricLoginEnabled, 
@@ -35,11 +35,11 @@ export default function AuthScreen(): React.ReactElement {
   const [name, setName] = useState("");
   const [surname, setSurname] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [hasBiometricTriggered, setHasBiometricTriggered] = useState(false);
   const [secure, setSecure] = useState(true);
-
   const { height, width } = useWindowDimensions();
+
+
   const hScale = Math.min(height / 800, 1);
   const wScale = Math.max(Math.min(width / 390, 1), 0.85);
   const redirectTo = Platform.select({
@@ -54,6 +54,7 @@ export default function AuthScreen(): React.ReactElement {
   }, [screen]);
 
   // If user is already logged in, redirect to tabs
+
   useEffect(() => {
     if (!authLoading && user) {
       router.replace("/(tabs)");
@@ -74,7 +75,7 @@ export default function AuthScreen(): React.ReactElement {
         setHasBiometricTriggered(true);
         
   // Auto-trigger biometric login (slight delay for better reliability)
-  console.log(`🔐 ${type} login enabled - auto-triggering`);
+  console.log(` ${type} login enabled - auto-triggering`);
   setTimeout(() => handleBiometricLogin(), 800);
       }
     })();
@@ -83,7 +84,7 @@ export default function AuthScreen(): React.ReactElement {
   async function handleBiometricLogin() {
     // Prevent multiple simultaneous biometric prompts
     if (isLoading) {
-      console.log("⚠️ Biometric login already in progress");
+      console.log(" Biometric login already in progress");
       return;
     }
     
@@ -149,51 +150,6 @@ export default function AuthScreen(): React.ReactElement {
       Alert.alert("Login Failed", err?.message ?? "Biometric login failed");
     } finally {
       setIsLoading(false);
-    }
-  }
-
-  async function signInWithGoogle() {
-    // Prevent multiple simultaneous calls
-    if (isGoogleLoading) {
-      console.log("⚠️ Google sign-in already in progress");
-      return;
-    }
-    
-    try {
-      setIsGoogleLoading(true);
-      setIsLoading(true);
-      const redirectUri = getRedirectTo();
-      console.log("🔄 OAuth redirect URI:", redirectUri);
-      
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: redirectUri,
-          skipBrowserRedirect: Platform.OS === "web" ? false : true,
-          queryParams: {
-            access_type: "offline",
-            prompt: "consent",
-          },
-        },
-      });
-      
-      if (error) {
-        console.error("❌ Google Sign-in error:", error);
-        Alert.alert(
-          "Google Sign-in Failed",
-          `${error.message}\n\nMake sure you're connected to the internet and try again.`
-        );
-      }
-    } catch (err: any) {
-      console.error("❌ Unexpected error during Google sign-in:", err);
-      Alert.alert(
-        "Sign-in Error",
-        "An unexpected error occurred. Please try again."
-      );
-    } finally {
-      setIsLoading(false);
-      // Add delay before allowing another attempt
-      setTimeout(() => setIsGoogleLoading(false), 2000);
     }
   }
 
@@ -582,10 +538,10 @@ export default function AuthScreen(): React.ReactElement {
                     <View style={styles.divider} />
                   </View>
 
-                  <TouchableOpacity style={[styles.btn, styles.btnGoogle]} onPress={signInWithGoogle}>
-                    <Ionicons name="logo-google" size={18} color="#111827" />
-                    <Text style={[styles.btnText, styles.btnTextDark]}>Sign in with Google</Text>
-                  </TouchableOpacity>
+
+                  <GoogleSignIn setIsLoading = {setIsLoading}/>
+
+                  
                 </View>
               </Animated.View>
             )}
@@ -631,45 +587,7 @@ export default function AuthScreen(): React.ReactElement {
   );
 }
 
-type InputProps = {
-  icon: keyof typeof Ionicons.glyphMap;
-  rightIcon?: keyof typeof Ionicons.glyphMap;
-  onRightIconPress?: () => void;
-  placeholder: string;
-  value: string;
-  onChangeText: (v: string) => void;
-  autoCapitalize?: "none" | "sentences" | "words" | "characters";
-  keyboardType?: any;
-  secureTextEntry?: boolean;
-  textContentType?: any;
-  inputHeight?: number;
-};
 
-function Input(props: InputProps) {
-  const { icon, rightIcon, onRightIconPress, placeholder, value, onChangeText, autoCapitalize, keyboardType, secureTextEntry, textContentType, inputHeight = 48 } = props;
-
-  return (
-    <View style={[styles.inputWrap, { height: inputHeight }]}>
-      <Ionicons name={icon} size={18} color="#93c5fd" style={{ marginRight: 10 }} />
-      <TextInput
-        style={styles.input}
-        placeholder={placeholder}
-        placeholderTextColor="#94a3b8"
-        value={value}
-        onChangeText={onChangeText}
-        autoCapitalize={autoCapitalize}
-        keyboardType={keyboardType}
-        secureTextEntry={secureTextEntry}
-        textContentType={textContentType}
-      />
-      {rightIcon ? (
-        <TouchableOpacity onPress={onRightIconPress} hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}>
-          <Ionicons name={rightIcon} size={18} color="#93c5fd" />
-        </TouchableOpacity>
-      ) : null}
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
   screen: { flex: 1, width: "100%", backgroundColor: "transparent" },
@@ -680,14 +598,10 @@ const styles = StyleSheet.create({
   title: { fontWeight: "800", color: "#0f172a", textAlign: "center" },
   subtitle: { color: "#475569", textAlign: "center", marginTop: 4 },
   container: { alignItems: "center" },
-  inputWrap: { flexDirection: "row", alignItems: "center", backgroundColor: "#f1f5f9", borderWidth: 1, borderColor: "rgba(59,130,246,0.25)", paddingHorizontal: 12, borderRadius: 14, marginBottom: 12 },
-  input: { flex: 1, color: "#0f172a", fontSize: 16 },
   btn: { flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center", paddingVertical: 14, borderRadius: 14, width: "100%", marginTop: 10 },
   btnPrimary: { backgroundColor: "#3b6df6", shadowColor: "#3b82f6", shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
   btnIndigo: { backgroundColor: "#2563eb", shadowColor: "#2563eb", shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
-  btnGoogle: { backgroundColor: "#ffffff" },
   btnText: { color: "#fff", fontSize: 16, textAlign: "center", fontWeight: "700" },
-  btnTextDark: { color: "#1e293b" },
   dividerRow: { flexDirection: "row", alignItems: "center", marginVertical: 10, gap: 8 },
   divider: { flex: 1, height: 1, backgroundColor: "#e2e8f0" },
   dividerText: { color: "#ffffff", fontSize: 14 },

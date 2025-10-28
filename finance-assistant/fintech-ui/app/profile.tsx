@@ -6,6 +6,7 @@ import {
   TextInput,
   TouchableOpacity,
   Alert,
+  Platform,
   ActivityIndicator,
   View,
   Switch,
@@ -17,6 +18,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Colors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+
 import { 
   isBiometricSupported, 
   enableBiometricLogin, 
@@ -161,18 +163,32 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    console.log("Im here!")
+
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Are you sure you want to logout?');
+      if (confirmed) {
+        await supabase.auth.signOut();
+        router.replace('/login');
+        console.log("I logged out (web)");
+      } else {
+        console.log("Cancel Pressed (web)");
+      }
+      return; // stop here, no need to run the Alert
+    }
     Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel', onPress: () => console.log('Cancel Pressed')},
         {
           text: 'Logout',
           style: 'destructive',
           onPress: async () => {
             await supabase.auth.signOut();
             router.replace('/login');
+            console.log("I loggedout")
           },
         },
       ]
