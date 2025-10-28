@@ -21,6 +21,13 @@ TestingPurposes/Nikita/Classifier/category_classifier.pth
 .DS_Store
 Thumbs.db
 
+# IDE
+.idea/
+.vscode/
+
+# Expo
+.expo/
+
 # Data files (too large for Git)
 *.traineddata
 *.csv
