@@ -1,6 +1,6 @@
 import { View, TextInput, TouchableOpacity, StyleSheet } from "react-native"
 import { Ionicons } from "@expo/vector-icons";
-
+import styles from "./styles";
 type InputProps = {
   icon: keyof typeof Ionicons.glyphMap;
   rightIcon?: keyof typeof Ionicons.glyphMap;
@@ -40,7 +40,3 @@ export default function Input(props: InputProps) {
     </View>
   );
 }
-const styles = StyleSheet.create({
-  inputWrap: { flexDirection: "row", alignItems: "center", backgroundColor: "#f1f5f9", borderWidth: 1, borderColor: "rgba(59,130,246,0.25)", paddingHorizontal: 12, borderRadius: 14, marginBottom: 12 },
-  input: { flex: 1, color: "#0f172a", fontSize: 16 },
-});

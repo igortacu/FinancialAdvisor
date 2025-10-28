@@ -12,6 +12,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import Input from "./input";
 import GoogleSignIn from "./signInGoogle"
+import CreateButton from "./createButton";
 import { supabase } from "@/api";
 import { useAuth } from "@/store/auth";
 import { upsertProfile, getProfile } from "@/lib/profile";
@@ -24,7 +25,7 @@ import {
   getStoredEmail,
   disableBiometricLogin
 } from "@/lib/biometric";
-
+import styles from "./styles"
 type Screen = "welcome" | "register" | "login";
 
 export default function AuthScreen(): React.ReactElement {
@@ -197,7 +198,7 @@ export default function AuthScreen(): React.ReactElement {
 
       // Check if user already exists (Supabase returns user but with empty identities array)
       if (data.user && data.session && data.user.identities && data.user.identities.length === 0) {
-        console.log("⚠️  User already exists");
+        console.log("User already exists");
         Alert.alert(
           "Account Exists",
           "An account with this email already exists. Please login instead.",
@@ -209,8 +210,8 @@ export default function AuthScreen(): React.ReactElement {
 
       // Check if email confirmation is required
       if (data.user && !data.session) {
-        console.log("📧 Email confirmation required for:", data.user.id);
-        console.log("ℹ️  Profile will be created after email confirmation on first login");
+        console.log("Email confirmation required for:", data.user.id);
+        console.log("Profile will be created after email confirmation on first login");
         
         // Note: We cannot create the profile here due to RLS (Row Level Security)
         // The profile will be created automatically during the first login
@@ -541,7 +542,7 @@ export default function AuthScreen(): React.ReactElement {
 
                   <GoogleSignIn setIsLoading = {setIsLoading}/>
 
-                  
+
                 </View>
               </Animated.View>
             )}
@@ -553,10 +554,13 @@ export default function AuthScreen(): React.ReactElement {
                   <Input icon="person-outline" placeholder="Surname (optional)" value={surname} onChangeText={setSurname} autoCapitalize="words" textContentType="familyName" inputHeight={dyn.inputH} />
                   <Input icon="mail-outline" placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" textContentType="emailAddress" inputHeight={dyn.inputH} />
                   <Input icon="lock-closed-outline" placeholder="Password (min 6 characters)" value={password} onChangeText={setPassword} autoCapitalize="none" secureTextEntry={secure} rightIcon={secure ? "eye-outline" : "eye-off-outline"} onRightIconPress={() => setSecure(v => !v)} textContentType="password" inputHeight={dyn.inputH} />
-
+                  <CreateButton isLoading = {isLoading} handleRegister={() => {
+                      handleRegister();
+                  }}/>
+{/* 
                   <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={handleRegister} disabled={isLoading}>
                     {isLoading ? <ActivityIndicator color="#fff" /> : (<><Ionicons name="checkmark-circle" size={18} color="#fff" /><Text style={styles.btnText}>Create account</Text></>)}
-                  </TouchableOpacity>
+                  </TouchableOpacity> */}
                 </View>
               </Animated.View>
             )}
@@ -586,26 +590,3 @@ export default function AuthScreen(): React.ReactElement {
     </View>
   );
 }
-
-
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, width: "100%", backgroundColor: "transparent" },
-  heroWrap: { alignItems: "center" },
-  backButton: { position: "absolute", top: 50, left: 0, padding: 16, zIndex: 10 },
-  heroBadge: { flexDirection: "row", gap: 8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: "rgba(59,130,246,0.1)", alignItems: "center", marginBottom: 12 },
-  heroBadgeText: { color: "#2563eb", fontWeight: "600" },
-  title: { fontWeight: "800", color: "#0f172a", textAlign: "center" },
-  subtitle: { color: "#475569", textAlign: "center", marginTop: 4 },
-  container: { alignItems: "center" },
-  btn: { flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center", paddingVertical: 14, borderRadius: 14, width: "100%", marginTop: 10 },
-  btnPrimary: { backgroundColor: "#3b6df6", shadowColor: "#3b82f6", shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
-  btnIndigo: { backgroundColor: "#2563eb", shadowColor: "#2563eb", shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
-  btnText: { color: "#fff", fontSize: 16, textAlign: "center", fontWeight: "700" },
-  dividerRow: { flexDirection: "row", alignItems: "center", marginVertical: 10, gap: 8 },
-  divider: { flex: 1, height: 1, backgroundColor: "#e2e8f0" },
-  dividerText: { color: "#ffffff", fontSize: 14 },
-  loadingOverlay: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: "rgba(255,255,255,0.6)", alignItems: "center", justifyContent: "center", gap: 10 },
-  loadingText: { color: "#bfdbfe" },
-  smallText: { paddingTop: 10, fontSize: 15, color: "#dae2f0", textAlign: "center" },
-});
