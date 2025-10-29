@@ -10,6 +10,8 @@ import {
   Modal,
   Pressable,
   Platform,
+  TextInput,
+  Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
@@ -28,6 +30,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Reanimated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useAuth } from "@/store/auth";
 import { useRouter } from "expo-router";
+import { Fx } from "@/api";
 
 /* ================= Mock data ================= */
 const accounts = [
@@ -39,11 +42,19 @@ type Tx = {
   id: string;
   ts: string; // ISO
   merchant: string;
-  amount: number; // negative = expense
+  amount: number; // kept for backward compat; will mirror amount_base
   type: "groceries" | "transport" | "entertainment" | "other";
+
+  // FX fields (original + normalized)
+  amount_original?: number;        // amount in original currency
+  currency_original?: string;      // e.g., "EUR"
+  amount_base?: number;            // normalized to base currency
+  base_currency?: string;          // e.g., "USD"
+  fx_rate?: number;                // rate from original to base
+  fx_at?: string;                  // ISO timestamp for the used rate
 };
 
-const initialTx: Tx[] = [
+const seedTx: Tx[] = [
   {
     id: "t1",
     ts: new Date().toISOString(),
@@ -80,6 +91,17 @@ const initialTx: Tx[] = [
     type: "transport",
   },
 ];
+
+const initialTx: Tx[] = seedTx.map((t) => ({
+  ...t,
+  // Backfill as base USD for existing mock rows
+  amount_original: t.amount,
+  currency_original: "USD",
+  amount_base: t.amount,
+  base_currency: "USD",
+  fx_rate: 1,
+  fx_at: new Date().toISOString(),
+}));
 
 /* ================= Theme ================= */
 const UI = {
@@ -120,6 +142,19 @@ export const PaymentsBus = {
 
 
 /* ================= Helpers ================= */
+// Currency formatting with currency code
+const fmtMoney = (val: number, currency: string) => {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }).format(val);
+  } catch {
+    return `${val.toFixed(2)} ${currency}`;
+  }
+};
+
 const ddmm = (d: Date) =>
   `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
 const dayStart = (d: Date) => {
@@ -147,33 +182,66 @@ function Frosted({
   );
 }
 
-/* ================= Series from history (last 7 days) ================= */
-function useSeriesFromTx(tx: Tx[]) {
+/* ================= Series from history (range-aware) ================= */
+type ChartRange = "7d" | "12m";
+
+function useSeries(tx: Tx[], range: ChartRange) {
   return React.useMemo(() => {
-    const labels: string[] = [];
-    const starts: Date[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = dayN(i);
-      labels.push(ddmm(d));
-      starts.push(d);
+    const asNumber = (val: number | undefined, fallback = 0) => (typeof val === "number" ? val : fallback);
+
+    if (range === "7d") {
+      // Daily for last 7 days (existing logic)
+      const labels: string[] = [];
+      const starts: Date[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = dayN(i);
+        labels.push(ddmm(d));
+        starts.push(d);
+      }
+      const series = labels.map((label, idx) => {
+        const start = starts[idx], end = new Date(start);
+        end.setDate(start.getDate() + 1);
+        const total = tx
+          .filter((t) => {
+            const tms = new Date(t.ts).getTime();
+            return tms >= start.getTime() && tms < end.getTime();
+          })
+          .reduce((s, t) => s + Math.abs(Math.min(0, asNumber(t.amount_base ?? t.amount))), 0);
+        return { label, value: Number(total.toFixed(2)) };
+      });
+      let maxIdx = 0;
+      for (let i = 1; i < series.length; i++) if (series[i].value > series[maxIdx].value) maxIdx = i;
+      return { series, maxIdx };
     }
-    const series = labels.map((label, idx) => {
-      const start = starts[idx],
-        end = new Date(start);
-      end.setDate(start.getDate() + 1);
+
+    // 12 months: monthly aggregation (current month and previous 11)
+    const now = new Date();
+    const monthStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 1);
+    const addMonths = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth() + n, 1);
+
+    const starts: Date[] = [];
+    for (let i = 11; i >= 0; i--) {
+      starts.push(addMonths(monthStart(now), -i));
+    }
+    const labels = starts.map((s) =>
+      s.toLocaleString(undefined, { month: "short" }) // e.g., Jan, Feb
+    );
+
+    const series = starts.map((start, idx) => {
+      const end = addMonths(start, 1);
       const total = tx
         .filter((t) => {
           const tms = new Date(t.ts).getTime();
           return tms >= start.getTime() && tms < end.getTime();
         })
-        .reduce((s, t) => s + Math.abs(Math.min(0, t.amount)), 0);
-      return { label, value: Number(total.toFixed(2)) }; // keep cents for better shape
+        .reduce((s, t) => s + Math.abs(Math.min(0, asNumber(t.amount_base ?? t.amount))), 0);
+      return { label: labels[idx], value: Number(total.toFixed(2)) };
     });
+
     let maxIdx = 0;
-    for (let i = 1; i < series.length; i++)
-      if (series[i].value > series[maxIdx].value) maxIdx = i;
+    for (let i = 1; i < series.length; i++) if (series[i].value > series[maxIdx].value) maxIdx = i;
     return { series, maxIdx };
-  }, [tx]);
+  }, [tx, range]);
 }
 
 /* ================= Chart helpers ================= */
@@ -373,6 +441,7 @@ function OverviewChart({
 /* ================= History state ================= */
 function useTxHistory() {
   const [tx, setTx] = React.useState<Tx[]>(initialTx);
+  // keep subscription active (React will use the returned function as cleanup)
   React.useEffect(() => PaymentsBus.subscribe((t) => setTx((p) => [t, ...p])), []);
   return { tx };
 }
@@ -385,8 +454,85 @@ export default function Dashboard() {
 
   const y = React.useRef(new RNAnimated.Value(0)).current;
   const [menuVisible, setMenuVisible] = React.useState(false);
+  const [txModalVisible, setTxModalVisible] = React.useState(false);
   const { tx } = useTxHistory();
-  const { series, maxIdx } = useSeriesFromTx(tx);
+
+  // Range toggle: 7 days vs 12 months
+  const [chartRange, setChartRange] = React.useState<ChartRange>("7d");
+  const { series, maxIdx } = useSeries(tx, chartRange);
+
+  // Define the base currency (normally from profile; default USD)
+  const [baseCurrency] = React.useState("USD");
+
+  // New: add-transaction modal state
+  const [form, setForm] = React.useState({
+    amount: "",
+    currency: "EUR",
+    date: "", // ISO yyyy-mm-dd (optional)
+    isExpense: true,
+    merchant: "",
+  });
+
+  const submitNewTx = async () => {
+    try {
+      const amt = parseFloat(form.amount.replace(",", "."));
+      if (!isFinite(amt) || amt <= 0) {
+        Alert.alert("Invalid amount", "Enter a positive number.");
+        return;
+      }
+      const currencyOriginal = (form.currency || "USD").trim().toUpperCase();
+      if (!/^[A-Z]{3}$/.test(currencyOriginal)) {
+        Alert.alert("Invalid currency", "Use a 3-letter code, e.g., USD, EUR, MDL.");
+        return;
+      }
+      // Parse date; allow empty -> now
+      const ts =
+        form.date && !isNaN(Date.parse(form.date))
+          ? new Date(form.date).toISOString()
+          : new Date().toISOString();
+
+      const amountOriginalSigned = form.isExpense ? -Math.abs(amt) : Math.abs(amt);
+
+      let normalized = Math.abs(amt);
+      let rate = 1;
+      let at = new Date().toISOString();
+      try {
+        const res = await Fx.normalizeAmount(Math.abs(amt), currencyOriginal, baseCurrency);
+        normalized = res.normalized;
+        rate = res.rate;
+        at = res.at;
+      } catch (e) {
+        // Fallback if FX fails and same-currency; otherwise notify
+        if (currencyOriginal !== baseCurrency) {
+          Alert.alert("FX error", "Could not fetch FX rate. Check your Finnhub key or Function proxy.");
+          return;
+        }
+      }
+
+      const amountBaseSigned = form.isExpense ? -Math.abs(normalized) : Math.abs(normalized);
+
+      const newTx = {
+        id: `fx-${Date.now()}`,
+        ts,
+        merchant: form.merchant || "Manual Entry",
+        type: "other" as const,
+        // normalized in main amount fields
+        amount: amountBaseSigned,
+        amount_base: amountBaseSigned,
+        base_currency: baseCurrency,
+        // original info preserved
+        amount_original: amountOriginalSigned,
+        currency_original: currencyOriginal,
+        fx_rate: rate,
+        fx_at: at,
+      };
+      PaymentsBus.add(newTx);
+      setTxModalVisible(false);
+      setForm({ amount: "", currency: currencyOriginal, date: "", isExpense: true, merchant: "" });
+    } catch (err) {
+      Alert.alert("Error", "Failed to add transaction.");
+    }
+  };
 
   const headerTranslate = y.interpolate({
     inputRange: [0, 120],
@@ -472,6 +618,89 @@ export default function Dashboard() {
         </View>
       </Modal>
 
+      {/* Add Transaction Modal */}
+      <Modal transparent visible={txModalVisible} animationType="fade" onRequestClose={() => setTxModalVisible(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setTxModalVisible(false)} />
+        <View style={styles.addModalCard}>
+          <Text style={styles.addTitle}>Add Transaction (FX)</Text>
+
+          <View style={styles.inputRow}>
+            <Text style={styles.inputLabel}>Amount</Text>
+            <TextInput
+              value={form.amount}
+              onChangeText={(t) => setForm((f) => ({ ...f, amount: t }))}
+              placeholder="e.g. 25.50"
+              keyboardType="decimal-pad"
+              style={styles.input}
+            />
+          </View>
+
+          <View style={styles.inputRow}>
+            <Text style={styles.inputLabel}>Currency</Text>
+            <TextInput
+              value={form.currency}
+              onChangeText={(t) => setForm((f) => ({ ...f, currency: t }))}
+              placeholder="EUR / MDL / USD"
+              autoCapitalize="characters"
+              style={styles.input}
+              maxLength={3}
+            />
+          </View>
+
+          <View style={styles.quickChips}>
+            {["EUR", "USD", "MDL", "GBP", "RON"].map((c) => (
+              <Pressable key={c} onPress={() => setForm((f) => ({ ...f, currency: c }))} style={styles.chip}>
+                <Text style={styles.chipText}>{c}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <View style={styles.inputRow}>
+            <Text style={styles.inputLabel}>Date (ISO)</Text>
+            <TextInput
+              value={form.date}
+              onChangeText={(t) => setForm((f) => ({ ...f, date: t }))}
+              placeholder="YYYY-MM-DD (optional)"
+              style={styles.input}
+            />
+          </View>
+
+          <View style={styles.inputRow}>
+            <Text style={styles.inputLabel}>Merchant</Text>
+            <TextInput
+              value={form.merchant}
+              onChangeText={(t) => setForm((f) => ({ ...f, merchant: t }))}
+              placeholder="e.g. Coffee Shop"
+              style={styles.input}
+            />
+          </View>
+
+          <View style={styles.toggleRow}>
+            <Pressable
+              onPress={() => setForm((f) => ({ ...f, isExpense: true }))
+          }style={[styles.toggleBtn, form.isExpense && styles.toggleBtnActive]}
+            >
+              <Text style={[styles.toggleText, form.isExpense && styles.toggleTextActive]}>Expense</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setForm((f) => ({ ...f, isExpense: false }))
+         } style={[styles.toggleBtn, !form.isExpense && styles.toggleBtnActive]}
+            >
+              <Text style={[styles.toggleText, !form.isExpense && styles.toggleTextActive]}>Income</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.actionsRow}>
+            <TouchableOpacity onPress={() => setTxModalVisible(false)} style={[styles.actionBtn, styles.btnSecondary]}>
+              <Text style={styles.btnSecondaryText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={submitNewTx} style={[styles.actionBtn, styles.btnPrimary]}>
+              <Text style={styles.btnPrimaryText}>Add</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Main scroller */}
       <RNAnimated.FlatList
         data={tx}
@@ -551,8 +780,15 @@ export default function Dashboard() {
             {/* Overview */}
             <Reanimated.View entering={FadeInUp.delay(100).duration(380)} style={{ marginTop: 6 }}>
               <View style={styles.rowBetween}>
-                <Text style={styles.section}>Overview</Text>
-                <Text style={styles.link}>See all</Text>
+                <Text style={styles.section}>
+                  Overview {chartRange === "7d" ? "(7 days)" : "(12 months)"}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setChartRange((r) => (r === "7d" ? "12m" : "7d"))}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.link}>{chartRange === "7d" ? "See all" : "See 7d"}</Text>
+                </TouchableOpacity>
               </View>
               <View style={{ paddingHorizontal: 16, marginTop: 10 }}>
                 <View style={[styles.shadowLg, styles.frostWrap, { borderRadius: 22, padding: 0 }]}>
@@ -568,8 +804,8 @@ export default function Dashboard() {
                       paddingBottom: 12,
                     }}
                   >
-                    {series.map((d) => (
-                      <Text key={d.label} style={{ color: UI.sub, fontSize: 11 }}>
+                    {series.map((d, i) => (
+                      <Text key={`${d.label}-${i}`} style={{ color: UI.sub, fontSize: 11 }}>
                         {d.label}
                       </Text>
                     ))}
@@ -578,11 +814,13 @@ export default function Dashboard() {
               </View>
             </Reanimated.View>
 
-            {/* Transaction section label */}
+            {/* Transaction section label + open form */}
             <Reanimated.View entering={FadeInUp.delay(160).duration(320)} style={{ marginTop: 6 }}>
               <View style={[styles.rowBetween, { paddingHorizontal: 16 }]}>
                 <Text style={styles.section}>Transaction History</Text>
-                <Text style={styles.link}>See all</Text>
+                <TouchableOpacity onPress={() => setTxModalVisible(true)}>
+                  <Text style={styles.link}>Add</Text>
+                </TouchableOpacity>
               </View>
             </Reanimated.View>
           </>
@@ -595,6 +833,15 @@ export default function Dashboard() {
           if (m.includes("netflix")) iconEl = <FontAwesome5 name="netflix" size={18} />;
           else if (m.includes("paypal")) iconEl = <FontAwesome5 name="paypal" size={18} />;
           else if (m.includes("spotify")) iconEl = <FontAwesome5 name="spotify" size={18} />;
+
+          const normalized = item.amount_base ?? item.amount;
+          const normalizedAbs = Math.abs(normalized);
+          const base = item.base_currency ?? "USD";
+
+          const hasOriginal =
+            item.amount_original != null &&
+            item.currency_original &&
+            item.currency_original.toUpperCase() !== (base || "").toUpperCase();
 
           return (
             <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
@@ -609,11 +856,23 @@ export default function Dashboard() {
                         <Text style={{ color: UI.sub, fontSize: 12 }}>
                           {dateStr} · {item.type}
                         </Text>
+                        {hasOriginal ? (
+                          <Text style={{ color: UI.sub, fontSize: 12, marginTop: 2 }}>
+                            Original: {fmtMoney(Math.abs(item.amount_original!), item.currency_original!)} · rate {item.fx_rate?.toFixed(4)}
+                          </Text>
+                        ) : null}
                       </View>
                     </View>
-                    <Text style={{ fontWeight: "700", color: UI.text }}>
-                      ${Math.abs(item.amount).toFixed(2)}
-                    </Text>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text style={{ fontWeight: "700", color: UI.text }}>
+                        {fmtMoney(normalizedAbs, base)}
+                      </Text>
+                      {hasOriginal && item.fx_at ? (
+                        <Text style={{ color: UI.sub, fontSize: 11 }}>
+                          {new Date(item.fx_at).toLocaleDateString()}
+                        </Text>
+                      ) : null}
+                    </View>
                   </View>
                 </View>
               </View>
@@ -792,4 +1051,57 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   menuText: { marginLeft: 6, color: UI.text },
+  addModalCard: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    top: 120,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  addTitle: { fontSize: 16, fontWeight: "900", color: UI.text, marginBottom: 8 },
+  inputRow: { marginBottom: 10 },
+  inputLabel: { fontSize: 12, fontWeight: "700", color: UI.sub, marginBottom: 6 },
+  input: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: UI.text,
+    backgroundColor: "#fff",
+  },
+  quickChips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 },
+  chip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#EEF2FF",
+  },
+  chipText: { color: UI.text, fontWeight: "700", fontSize: 12 },
+  toggleRow: { flexDirection: "row", gap: 8, marginTop: 2, marginBottom: 12 },
+  toggleBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    alignItems: "center",
+  },
+  toggleBtnActive: { backgroundColor: "#246BFD", borderColor: "#246BFD" },
+  toggleText: { fontSize: 13, fontWeight: "700", color: UI.text },
+  toggleTextActive: { color: "#fff" },
+  actionsRow: { flexDirection: "row", justifyContent: "flex-end", gap: 10, marginTop: 6 },
+  actionBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
+  btnSecondary: { backgroundColor: "#F3F4F6" },
+  btnSecondaryText: { color: UI.text, fontWeight: "800" },
+  btnPrimary: { backgroundColor: "#246BFD" },
+  btnPrimaryText: { color: "#fff", fontWeight: "800" },
 });
