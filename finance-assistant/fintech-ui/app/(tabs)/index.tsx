@@ -311,14 +311,24 @@ function OverviewChart({
   const line = spline(pts, 0.2);
   const area = `${line} L ${nx(series.length - 1)} ${padding + graphH} L ${nx(0)} ${padding + graphH} Z`;
 
+  // Clamp active and peak indices
   const [active, setActive] = React.useState(series.length - 1);
-  const a = pts[active];
-  const peak = pts[maxIdx];
+  const lastIdx = Math.max(0, series.length - 1);
+  React.useEffect(() => {
+    setActive(lastIdx);
+  }, [lastIdx]);
+
+  const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), hi);
+  const safeActive = clamp(active, 0, lastIdx);
+  const safePeakIdx = clamp(maxIdx, 0, lastIdx);
+
+  const a = pts[safeActive];
+  const peak = pts[safePeakIdx];
 
   const onTouch = (x: number) => {
     const rel = Math.min(Math.max(x - padding, 0), graphW);
     const idx = Math.round((rel / graphW) * (series.length - 1));
-    setActive(idx);
+    setActive(clamp(idx, 0, lastIdx));
   };
 
   const yTicks = Math.round(max / step);
@@ -391,10 +401,8 @@ function OverviewChart({
           ))}
         </G>
 
-        {/* glow */}
+        {/* glow + area + line */}
         <Path d={line} stroke="#6F86FF" strokeOpacity={0.18} strokeWidth={6} fill="none" />
-
-        {/* area + line */}
         <Path d={area} fill="url(#gradArea)" />
         <Path
           d={line}
@@ -421,7 +429,7 @@ function OverviewChart({
           <G x={Math.min(a.x + 8, width - 128)} y={Math.max(a.y - 28, 8)}>
             <Rect width={120} height={26} rx={13} fill="#6F86FF" />
             <SvgText x={60} y={16} {...chipStyle} textAnchor="middle">
-              {moneyFmt(series[active].value)} • {series[active].label}
+              {moneyFmt(series[safeActive].value)} • {series[safeActive].label}
             </SvgText>
           </G>
         </G>
@@ -430,7 +438,7 @@ function OverviewChart({
         <G x={Math.min(peak.x + 8, width - 64)} y={Math.max(peak.y - 26, 8)}>
           <Rect width={60} height={22} rx={11} fill="#6F86FF" />
           <SvgText x={30} y={14} {...chipStyle} textAnchor="middle">
-            {moneyFmt(series[maxIdx].value)}
+            {moneyFmt(series[safePeakIdx].value)}
           </SvgText>
         </G>
       </Svg>
@@ -480,12 +488,16 @@ export default function Dashboard() {
         Alert.alert("Invalid amount", "Enter a positive number.");
         return;
       }
-      const currencyOriginal = (form.currency || "USD").trim().toUpperCase();
-      if (!/^[A-Z]{3}$/.test(currencyOriginal)) {
-        Alert.alert("Invalid currency", "Use a 3-letter code, e.g., USD, EUR, MDL.");
+
+      // Accept names/symbols and 3-letter codes
+      const iso = parseCurrency(form.currency) ?? form.currency.trim().toUpperCase();
+      if (!/^[A-Z]{3}$/.test(iso)) {
+        Alert.alert("Invalid currency", "Use a code or name like EUR, USD, MDL, Euro, Pound, Lei.");
         return;
       }
-      // Parse date; allow empty -> now
+      const currencyOriginal = iso;
+
+      // Parse date
       const ts =
         form.date && !isNaN(Date.parse(form.date))
           ? new Date(form.date).toISOString()
@@ -501,10 +513,10 @@ export default function Dashboard() {
         normalized = res.normalized;
         rate = res.rate;
         at = res.at;
-      } catch (e) {
-        // Fallback if FX fails and same-currency; otherwise notify
+      } catch (e: any) {
+        // Show precise error to help diagnose, but do not add mixed-currency into USD totals
         if (currencyOriginal !== baseCurrency) {
-          Alert.alert("FX error", "Could not fetch FX rate. Check your Finnhub key or Function proxy.");
+          Alert.alert("FX error", String(e?.message || e || "Could not fetch FX rate."));
           return;
         }
       }
@@ -516,11 +528,9 @@ export default function Dashboard() {
         ts,
         merchant: form.merchant || "Manual Entry",
         type: "other" as const,
-        // normalized in main amount fields
         amount: amountBaseSigned,
         amount_base: amountBaseSigned,
         base_currency: baseCurrency,
-        // original info preserved
         amount_original: amountOriginalSigned,
         currency_original: currencyOriginal,
         fx_rate: rate,
@@ -640,10 +650,12 @@ export default function Dashboard() {
             <TextInput
               value={form.currency}
               onChangeText={(t) => setForm((f) => ({ ...f, currency: t }))}
-              placeholder="EUR / MDL / USD"
-              autoCapitalize="characters"
+              placeholder="EUR / USD / GBP / MDL / RON or names like Euro, Pound, Lei"
+              autoCapitalize="none"
+              autoCorrect={false}
               style={styles.input}
-              maxLength={3}
+              // allow longer free-text inputs (names/symbols)
+              maxLength={16}
             />
           </View>
 
@@ -677,14 +689,14 @@ export default function Dashboard() {
 
           <View style={styles.toggleRow}>
             <Pressable
-              onPress={() => setForm((f) => ({ ...f, isExpense: true }))
-          }style={[styles.toggleBtn, form.isExpense && styles.toggleBtnActive]}
+              onPress={() => setForm((f) => ({ ...f, isExpense: true }))}
+              style={[styles.toggleBtn, form.isExpense && styles.toggleBtnActive]}
             >
               <Text style={[styles.toggleText, form.isExpense && styles.toggleTextActive]}>Expense</Text>
             </Pressable>
             <Pressable
-              onPress={() => setForm((f) => ({ ...f, isExpense: false }))
-         } style={[styles.toggleBtn, !form.isExpense && styles.toggleBtnActive]}
+              onPress={() => setForm((f) => ({ ...f, isExpense: false }))}
+              style={[styles.toggleBtn, !form.isExpense && styles.toggleBtnActive]}
             >
               <Text style={[styles.toggleText, !form.isExpense && styles.toggleTextActive]}>Income</Text>
             </Pressable>
@@ -1105,3 +1117,45 @@ const styles = StyleSheet.create({
   btnPrimary: { backgroundColor: "#246BFD" },
   btnPrimaryText: { color: "#fff", fontWeight: "800" },
 });
+
+// Map free-text to ISO currency code (supports names/symbols)
+const parseCurrency = (input: string): string | null => {
+  if (!input) return null;
+  const raw = String(input).trim();
+
+  // If already a 3-letter code
+  const maybeCode = raw.toUpperCase();
+  if (/^[A-Z]{3}$/.test(maybeCode)) return maybeCode;
+
+  // Normalize text
+  const txt = raw.toLowerCase().replace(/[^a-z£€$ ]/g, "").trim();
+
+  const map: Record<string, string> = {
+    // symbols
+    "€": "EUR",
+    "eur": "EUR",
+    "euro": "EUR",
+    "euro currency": "EUR",
+
+    "$": "USD",
+    "usd": "USD",
+    "us dollar": "USD",
+    "dollar": "USD",
+
+    "£": "GBP",
+    "gbp": "GBP",
+    "pound": "GBP",
+    "british pound": "GBP",
+
+    "mdl": "MDL",
+    "moldovan leu": "MDL",
+    "leu moldovenesc": "MDL",
+
+    "ron": "RON",
+    "romanian leu": "RON",
+    "leu romanesc": "RON",
+    "lei": "RON", // ambiguous; default to RON
+  };
+
+  return map[txt] ?? null;
+};

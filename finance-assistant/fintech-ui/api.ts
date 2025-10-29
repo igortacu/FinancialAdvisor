@@ -57,6 +57,9 @@ export type NormalizeResult = {
   at: string; // ISO
 };
 
+// 5-minute in-memory cache for FX rates
+const rateCache = new Map<string, { rate: number; atISO: string; ts: number }>();
+
 export const Fx = {
   async getRate(fromCurrency: string, baseCurrency: string): Promise<{ rate: number; at: string }> {
     const from = (fromCurrency || '').toUpperCase();
@@ -64,44 +67,121 @@ export const Fx = {
     if (!from || !base) throw new Error('Missing currency codes');
     if (from === base) return { rate: 1, at: new Date().toISOString() };
 
-    // Try Supabase Edge Function proxy first: /fx-rate?base=FROM&quote=BASE
+    const key = `${from}->${base}`;
+    const nowTs = Date.now();
+    const cached = rateCache.get(key);
+    if (cached && nowTs - cached.ts < 5 * 60_000) {
+      return { rate: cached.rate, at: cached.atISO };
+    }
+
+    const providers: Array<() => Promise<{ rate: number; at: string }>> = [];
+
+    // 1) Supabase Edge Function proxy
     if (fnProxyUrl) {
+      providers.push(async () => {
+        const url = `${fnProxyUrl.replace(/\/$/, '')}/fx-rate?base=${encodeURIComponent(from)}&quote=${encodeURIComponent(base)}`;
+        const res = await fetch(url, { method: 'GET' });
+        if (!res.ok) throw new Error(`Function proxy HTTP ${res.status}`);
+        const data = await res.json();
+        const rate = typeof data?.rate === 'number' ? data.rate : undefined;
+        if (!rate) throw new Error('Function proxy missing rate');
+        const at = data?.at ?? new Date().toISOString();
+        return { rate, at };
+      });
+    }
+
+    // 2) exchangerate.host latest (no key, CORS-friendly)
+    providers.push(async () => {
+      const url = `https://api.exchangerate.host/latest?base=${encodeURIComponent(from)}&symbols=${encodeURIComponent(base)}`;
+      const res = await fetch(url, { method: 'GET' });
+      if (!res.ok) throw new Error(`exchangerate.host HTTP ${res.status}`);
+      const j = await res.json() as any;
+      const rate = typeof j?.rates?.[base] === 'number' ? j.rates[base] : undefined;
+      if (!rate) throw new Error(`exchangerate.host missing rate ${from}->${base}`);
+      const at = j?.date ? new Date(j.date).toISOString() : new Date().toISOString();
+      return { rate, at };
+    });
+
+    // 3) exchangerate.host convert (helps with MDL)
+    providers.push(async () => {
+      const url = `https://api.exchangerate.host/convert?from=${encodeURIComponent(from)}&to=${encodeURIComponent(base)}&amount=1`;
+      const res = await fetch(url, { method: 'GET' });
+      if (!res.ok) throw new Error(`exchangerate.host/convert HTTP ${res.status}`);
+      const j = await res.json() as any;
+      const rate = typeof j?.info?.rate === 'number' ? j.info.rate : undefined;
+      if (!rate) throw new Error(`exchangerate.host/convert missing rate ${from}->${base}`);
+      const at = j?.date ? new Date(j.date).toISOString() : new Date().toISOString();
+      return { rate, at };
+    });
+
+    // 4) Frankfurter (ECB)
+    providers.push(async () => {
+      const url = `https://api.frankfurter.app/latest?from=${encodeURIComponent(from)}&to=${encodeURIComponent(base)}`;
+      const res = await fetch(url, { method: 'GET' });
+      if (!res.ok) throw new Error(`Frankfurter HTTP ${res.status}`);
+      const j = await res.json() as any;
+      const rate = typeof j?.rates?.[base] === 'number' ? j.rates[base] : undefined;
+      if (!rate) throw new Error(`Frankfurter missing rate ${from}->${base}`);
+      const at = j?.date ? new Date(j.date).toISOString() : new Date().toISOString();
+      return { rate, at };
+    });
+
+    // 5) Finnhub (keyed; last due to CORS on web)
+    if (finnhubKey) {
+      providers.push(async () => {
+        const url = `https://finnhub.io/api/v1/forex/rates?base=${encodeURIComponent(from)}&token=${finnhubKey}`;
+        const res = await fetch(url, { method: 'GET' });
+        if (!res.ok) throw new Error(`Finnhub HTTP ${res.status}`);
+        const j = await res.json() as any;
+        const rate =
+          typeof j?.quote?.[base] === 'number'
+            ? j.quote[base]
+            : typeof j?.rates?.[base] === 'number'
+            ? j.rates[base]
+            : undefined;
+        if (!rate) throw new Error(`Finnhub missing rate ${from}->${base}`);
+        const at =
+          typeof j?.timestamp === 'number'
+            ? new Date(j.timestamp * 1000).toISOString()
+            : new Date().toISOString();
+        return { rate, at };
+      });
+    }
+
+    const errs: string[] = [];
+    for (const fn of providers) {
       try {
-        const res = await fetch(
-          `${fnProxyUrl.replace(/\/$/, '')}/fx-rate?base=${encodeURIComponent(from)}&quote=${encodeURIComponent(base)}`
-        );
-        if (res.ok) {
-          const data = await res.json();
-          if (typeof data?.rate === 'number') {
-            return { rate: data.rate, at: data.at ?? new Date().toISOString() };
-          }
-        }
-      } catch {
-        // fallthrough
+        const out = await fn();
+        rateCache.set(key, { rate: out.rate, atISO: out.at, ts: nowTs });
+        return out;
+      } catch (e: any) {
+        errs.push(String(e?.message || e));
       }
     }
 
-    // Finnhub fallback
-    if (!finnhubKey) throw new Error('Missing FINNHUB key or Function proxy for FX rates');
-    const url = `https://finnhub.io/api/v1/forex/rates?base=${encodeURIComponent(from)}&token=${finnhubKey}`;
-    const r = await fetch(url);
-    if (!r.ok) throw new Error('Failed to fetch FX rates from Finnhub');
-    const j = await r.json() as any;
-    const rate = j?.quote?.[base];
-    const at = typeof j?.timestamp === 'number'
-      ? new Date(j.timestamp * 1000).toISOString()
-      : new Date().toISOString();
-    if (typeof rate !== 'number') throw new Error(`Missing FX rate ${from}->${base}`);
-    return { rate, at };
+    // Offline last-resort via USD cross-rates (approximate)
+    const usdPerUnit: Record<string, number> = {
+      USD: 1,
+      EUR: 1.08,
+      GBP: 1.25,
+      RON: 0.22,
+      MDL: 0.056,
+    };
+    if (usdPerUnit[from] && usdPerUnit[base]) {
+      const rate = usdPerUnit[from] / usdPerUnit[base];
+      const at = new Date().toISOString();
+      rateCache.set(key, { rate, atISO: at, ts: nowTs });
+      return { rate, at };
+    }
+
+    throw new Error(`FX failed for ${from}->${base}. Tried ${providers.length}. Errors: ${errs.join(' | ')}`);
   },
 
-  async normalizeAmount(amount: number, fromCurrency: string, baseCurrency: string): Promise<NormalizeResult> {
+  async normalizeAmount(amount: number, fromCurrency: string, baseCurrency: string) {
     const { rate, at } = await this.getRate(fromCurrency, baseCurrency);
-    // Do not round here; preserve cents
     return { normalized: amount * rate, rate, at };
   },
 
-  // Helper to insert a transaction row that keeps original + normalized fields
   async insertNormalizedTransaction(row: {
     // your other transaction fields...
     user_id?: string;
