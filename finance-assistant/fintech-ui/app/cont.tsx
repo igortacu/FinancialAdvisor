@@ -17,7 +17,7 @@ import { Colors } from "@/constants/theme";
 import MultiSlider from "@ptomasroos/react-native-multi-slider";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-
+import styles from "./contStyle";
 // Set this to false to disable the hero image temporarily during development
 const USE_HERO_IMAGE = false; // Change this to true when hero.jpg is available
 
@@ -41,10 +41,9 @@ type BackgroundContainerProps = {
 } & Partial<ImageBackgroundProps>;
 
 const BackgroundContainer: React.FC<BackgroundContainerProps> = ({ children, style, ...props }) => {
-  if (USE_HERO_IMAGE) {
     return (
       <ImageBackground
-        source={require("../assets/images/hero.jpg")}
+        source={require("../assets/images/marm.jpg")}
         style={[containerStyles.base, style]}
         resizeMode="cover"
         {...props}
@@ -52,12 +51,6 @@ const BackgroundContainer: React.FC<BackgroundContainerProps> = ({ children, sty
         {children}
       </ImageBackground>
     );
-  }
-  return (
-    <View style={[containerStyles.base, containerStyles.solid, style]}>
-      {children}
-    </View>
-  );
 };
 
 type Spending = { rent: number; utilities: number; transportation: number; other: number };
@@ -245,9 +238,10 @@ export default function MultiStepForm() {
                     <TextInput
                       style={styles.input}
                       placeholder="Finances"
-                      placeholderTextColor="#1f1f1fff"
+                      placeholderTextColor="#8b8b8bff"
                       value={formData.finances}
                       onChangeText={(text) => setFormData({ ...formData, finances: text })}
+                      keyboardType="numeric"
                       returnKeyType="done"
                     />
                   </View>
@@ -432,134 +426,4 @@ export default function MultiStepForm() {
   );
 }
 
-import { TextStyle } from 'react-native';
 
-interface Styles {
-  container: ViewStyle;
-  label: TextStyle;
-  heroWrap: ViewStyle;
-  title: TextStyle;
-  subtitle: TextStyle;
-  card: ViewStyle;
-  inputWrap: ViewStyle;
-  input: TextStyle;
-  btn: ViewStyle;
-  btnPrimary: ViewStyle;
-  btnIndigo: ViewStyle;
-  btnText: TextStyle;
-  btnGhost: ViewStyle;
-  btnGhostText: TextStyle;
-  backButton: ViewStyle;
-  goalButtonsContainer: ViewStyle;
-  goalButton: ViewStyle;
-  goalButtonSelected: ViewStyle;
-  goalButtonText: TextStyle;
-  goalButtonTextSelected: TextStyle;
-  optionButton: ViewStyle;
-  optionSelected: ViewStyle;
-  optionText: TextStyle;
-  optionTextSelected: TextStyle;
-  errText: TextStyle;
-};
-
-const styles = StyleSheet.create<Styles>({
-  container: {
-    padding: 20,
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    marginVertical: 10,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.08)",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  label: { fontSize: 16, fontWeight: "600", color: "#111827", textAlign: "center", marginBottom: 12 },
-  heroWrap: { marginTop: 40, alignItems: "center" },
-  title: { fontSize: 30, fontWeight: "800", color: "#111827", textAlign: "center" },
-  subtitle: { fontSize: 15, color: "#6b7280", marginTop: 5, textAlign: "center" },
-  card: {
-    borderRadius: 20,
-    padding: 20,
-    marginTop: 50,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.08)",
-    backgroundColor: "#ffffff",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 3,
-  },
-  inputWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f9fafb",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.25)",
-    paddingHorizontal: 12,
-    marginBottom: 8,
-    height: 50,
-    shadowColor: "#000",
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  input: { flex: 1, fontSize: 16, color: "rgba(15, 14, 14, 1)" },
-  btn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 12,
-  },
-  btnPrimary: {
-    backgroundColor: "#4f46e5",
-    paddingVertical: 16,
-    borderRadius: 16,
-    shadowColor: "#4f46e5",
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 5,
-  },
-  btnIndigo: {
-    backgroundColor: "#6366f1",
-    shadowColor: "#6366f1",
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 5,
-  },
-  btnText: { color: "#ffffff", fontWeight: "700", fontSize: 16 },
-  btnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: "#6366f1" },
-  btnGhostText: { color: "#6366f1" },
-  backButton: { position: "absolute", top: 20, left: 15, backgroundColor: "transparent", padding: 10, zIndex: 5 },
-  goalButtonsContainer: { flexDirection: "row", marginBottom: 20, backgroundColor: "#E5E7EB", borderRadius: 12, padding: 4 },
-  goalButton: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 8, borderRadius: 9 },
-  goalButtonSelected: {
-    backgroundColor: "#fff",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  goalButtonText: { fontSize: 14, fontWeight: "600", color: "#374151" },
-  goalButtonTextSelected: { color: "#111827" },
-  optionButton: {
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    marginVertical: 5,
-    alignItems: "center",
-  },
-  optionSelected: { backgroundColor: "#4f46e5", borderColor: "#4f46e5" },
-  optionText: { color: "#000" },
-  optionTextSelected: { color: "#fff" },
-  errText: { color: "#ef4444", marginTop: 4, fontSize: 13 },
-});
