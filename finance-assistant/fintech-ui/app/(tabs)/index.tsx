@@ -46,12 +46,12 @@ type Tx = {
   type: "groceries" | "transport" | "entertainment" | "other";
 
   // FX fields (original + normalized)
-  amount_original?: number;        // amount in original currency
-  currency_original?: string;      // e.g., "EUR"
-  amount_base?: number;            // normalized to base currency
-  base_currency?: string;          // e.g., "USD"
-  fx_rate?: number;                // rate from original to base
-  fx_at?: string;                  // ISO timestamp for the used rate
+  amount_original?: number;        
+  currency_original?: string;      
+  amount_base?: number;            
+  base_currency?: string;         
+  fx_rate?: number;                
+  fx_at?: string;                  
 };
 
 const seedTx: Tx[] = [
@@ -163,6 +163,12 @@ const dayStart = (d: Date) => {
   return x;
 };
 const dayN = (n: number) => dayStart(new Date(Date.now() - n * 86400000));
+
+// New: helper to check if a date is within last 7 days (inclusive)
+const isWithinLast7Days = (d: Date) => {
+  const start = dayN(6); // 6 days ago, plus today = 7
+  return dayStart(d).getTime() >= start.getTime();
+};
 
 /* ================= Frosted card ================= */
 function Frosted({
@@ -537,6 +543,12 @@ export default function Dashboard() {
         fx_at: at,
       };
       PaymentsBus.add(newTx);
+
+      // If on 7d and the chosen date isn't in the last 7 days, switch to 12m so it's visible
+      if (chartRange === "7d" && !isWithinLast7Days(new Date(ts))) {
+        setChartRange("12m");
+      }
+
       setTxModalVisible(false);
       setForm({ amount: "", currency: currencyOriginal, date: "", isExpense: true, merchant: "" });
     } catch (err) {
@@ -716,6 +728,8 @@ export default function Dashboard() {
       {/* Main scroller */}
       <RNAnimated.FlatList
         data={tx}
+        // Make sure header (chart) rerenders when tx changes or range changes
+        extraData={{ txCount: tx.length, chartRange }}
         keyExtractor={(i) => i.id}
         onScroll={onScroll}
         scrollEventThrottle={16}
