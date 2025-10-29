@@ -1,19 +1,22 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
+  View, Text, TouchableOpacity, StyleSheet, Alert,
   ActivityIndicator, Platform, KeyboardAvoidingView,
   useWindowDimensions,
+  ImageBackground,
 } from "react-native";
+import * as SecureStore from 'expo-secure-store';
 import { Colors } from "@/constants/theme";
 import * as AuthSession from "expo-auth-session";
 import { Ionicons } from "@expo/vector-icons";
 import Animated, { FadeInUp, FadeOutDown } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-
+import Input from "./input";
+import GoogleSignIn from "./signInGoogle"
+import CreateButton from "./createButton";
 import { supabase } from "@/api";
 import { useAuth } from "@/store/auth";
-import { getRedirectTo } from "@/lib/authRedirect";
 import { upsertProfile, getProfile } from "@/lib/profile";
 import { 
   isBiometricLoginEnabled, 
@@ -24,7 +27,7 @@ import {
   getStoredEmail,
   disableBiometricLogin
 } from "@/lib/biometric";
-
+import styles from "./styles"
 type Screen = "welcome" | "register" | "login";
 
 export default function AuthScreen(): React.ReactElement {
@@ -35,11 +38,11 @@ export default function AuthScreen(): React.ReactElement {
   const [name, setName] = useState("");
   const [surname, setSurname] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [hasBiometricTriggered, setHasBiometricTriggered] = useState(false);
   const [secure, setSecure] = useState(true);
-
   const { height, width } = useWindowDimensions();
+
+
   const hScale = Math.min(height / 800, 1);
   const wScale = Math.max(Math.min(width / 390, 1), 0.85);
   const redirectTo = Platform.select({
@@ -54,9 +57,37 @@ export default function AuthScreen(): React.ReactElement {
   }, [screen]);
 
   // If user is already logged in, redirect to tabs
+
   useEffect(() => {
     if (!authLoading && user) {
-      router.replace("/(tabs)");
+      (async () => {
+        const POST_OAUTH_KEY = 'post_oauth_route';
+        try {
+          let postRoute: string | null = null;
+          if (Platform.OS === 'web') {
+            postRoute = localStorage.getItem(POST_OAUTH_KEY);
+          } else {
+            postRoute = await SecureStore.getItemAsync(POST_OAUTH_KEY);
+          }
+
+          if (postRoute) {
+            // Clear stored flag and navigate to the requested route
+            try {
+              if (Platform.OS === 'web') localStorage.removeItem(POST_OAUTH_KEY);
+              else await SecureStore.deleteItemAsync(POST_OAUTH_KEY);
+            } catch (e) {
+              console.warn('Could not clear post-oauth flag', e);
+            }
+            console.log('➡️ Redirecting to post-OAuth route:', postRoute);
+            router.replace(postRoute as any);
+            return;
+          }
+        } catch (err) {
+          console.warn('Error reading post-OAuth flag:', err);
+        }
+
+        router.replace("/(tabs)");
+      })();
     }
   }, [user, authLoading]);
 
@@ -74,7 +105,7 @@ export default function AuthScreen(): React.ReactElement {
         setHasBiometricTriggered(true);
         
   // Auto-trigger biometric login (slight delay for better reliability)
-  console.log(`🔐 ${type} login enabled - auto-triggering`);
+  console.log(` ${type} login enabled - auto-triggering`);
   setTimeout(() => handleBiometricLogin(), 800);
       }
     })();
@@ -83,7 +114,7 @@ export default function AuthScreen(): React.ReactElement {
   async function handleBiometricLogin() {
     // Prevent multiple simultaneous biometric prompts
     if (isLoading) {
-      console.log("⚠️ Biometric login already in progress");
+      console.log(" Biometric login already in progress");
       return;
     }
     
@@ -152,51 +183,6 @@ export default function AuthScreen(): React.ReactElement {
     }
   }
 
-  async function signInWithGoogle() {
-    // Prevent multiple simultaneous calls
-    if (isGoogleLoading) {
-      console.log("⚠️ Google sign-in already in progress");
-      return;
-    }
-    
-    try {
-      setIsGoogleLoading(true);
-      setIsLoading(true);
-      const redirectUri = getRedirectTo();
-      console.log("🔄 OAuth redirect URI:", redirectUri);
-      
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: redirectUri,
-          skipBrowserRedirect: Platform.OS === "web" ? false : true,
-          queryParams: {
-            access_type: "offline",
-            prompt: "consent",
-          },
-        },
-      });
-      
-      if (error) {
-        console.error("❌ Google Sign-in error:", error);
-        Alert.alert(
-          "Google Sign-in Failed",
-          `${error.message}\n\nMake sure you're connected to the internet and try again.`
-        );
-      }
-    } catch (err: any) {
-      console.error("❌ Unexpected error during Google sign-in:", err);
-      Alert.alert(
-        "Sign-in Error",
-        "An unexpected error occurred. Please try again."
-      );
-    } finally {
-      setIsLoading(false);
-      // Add delay before allowing another attempt
-      setTimeout(() => setIsGoogleLoading(false), 2000);
-    }
-  }
-
   async function handleRegister() {
     const e = email.trim().toLowerCase();
     const p = password.trim();
@@ -241,7 +227,7 @@ export default function AuthScreen(): React.ReactElement {
 
       // Check if user already exists (Supabase returns user but with empty identities array)
       if (data.user && data.session && data.user.identities && data.user.identities.length === 0) {
-        console.log("⚠️  User already exists");
+        console.log("User already exists");
         Alert.alert(
           "Account Exists",
           "An account with this email already exists. Please login instead.",
@@ -253,8 +239,8 @@ export default function AuthScreen(): React.ReactElement {
 
       // Check if email confirmation is required
       if (data.user && !data.session) {
-        console.log("📧 Email confirmation required for:", data.user.id);
-        console.log("ℹ️  Profile will be created after email confirmation on first login");
+        console.log("Email confirmation required for:", data.user.id);
+        console.log("Profile will be created after email confirmation on first login");
         
         // Note: We cannot create the profile here due to RLS (Row Level Security)
         // The profile will be created automatically during the first login
@@ -308,7 +294,7 @@ export default function AuthScreen(): React.ReactElement {
                   setPassword("");
                   setName("");
                   setSurname("");
-                  router.replace("/(tabs)");
+                  router.replace("/cont");
                 }
               },
               {
@@ -327,7 +313,7 @@ export default function AuthScreen(): React.ReactElement {
                   setPassword("");
                   setName("");
                   setSurname("");
-                  router.replace("/(tabs)");
+                  router.replace("/cont");
                 }
               }
             ]
@@ -337,7 +323,7 @@ export default function AuthScreen(): React.ReactElement {
           setPassword("");
           setName("");
           setSurname("");
-          router.replace("/(tabs)");
+          router.replace("/cont");
         }
       }
     } catch (err: any) {
@@ -535,7 +521,12 @@ export default function AuthScreen(): React.ReactElement {
   };
 
   return (
-    <View style={[styles.screen, { backgroundColor: Colors.light.background }]}>
+    <ImageBackground  
+    source={require("@/assets/images/marm.jpg")}
+    style={[styles.screen, { flex: 1 }]}  
+    resizeMode="cover"
+    >
+    <View style={[styles.screen]}>
       <KeyboardAvoidingView
         style={styles.screen}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -582,32 +573,37 @@ export default function AuthScreen(): React.ReactElement {
                     <View style={styles.divider} />
                   </View>
 
-                  <TouchableOpacity style={[styles.btn, styles.btnGoogle]} onPress={signInWithGoogle}>
-                    <Ionicons name="logo-google" size={18} color="#111827" />
-                    <Text style={[styles.btnText, styles.btnTextDark]}>Sign in with Google</Text>
-                  </TouchableOpacity>
+
+                  <GoogleSignIn setIsLoading = {setIsLoading}/>
+
+
                 </View>
               </Animated.View>
             )}
 
             {screen === "register" && (
               <Animated.View entering={FadeInUp.duration(300).delay(80)} exiting={FadeOutDown.duration(250)}>
-                <View>
-                  <Input icon="person-circle-outline" placeholder="Name (optional)" value={name} onChangeText={setName} autoCapitalize="words" textContentType="name" inputHeight={dyn.inputH} />
+                <View style = {[styles.inputs]}>
+                  <Input 
+                    icon="person-circle-outline" 
+                    placeholder="Name (optional)" 
+                    value={name} onChangeText={setName} 
+                    autoCapitalize="words" textContentType="name" 
+                    inputHeight={dyn.inputH} />
                   <Input icon="person-outline" placeholder="Surname (optional)" value={surname} onChangeText={setSurname} autoCapitalize="words" textContentType="familyName" inputHeight={dyn.inputH} />
                   <Input icon="mail-outline" placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" textContentType="emailAddress" inputHeight={dyn.inputH} />
                   <Input icon="lock-closed-outline" placeholder="Password (min 6 characters)" value={password} onChangeText={setPassword} autoCapitalize="none" secureTextEntry={secure} rightIcon={secure ? "eye-outline" : "eye-off-outline"} onRightIconPress={() => setSecure(v => !v)} textContentType="password" inputHeight={dyn.inputH} />
+                  <CreateButton isLoading = {isLoading} handleRegister={() => {
+                      handleRegister();
+                  }}/>
 
-                  <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={handleRegister} disabled={isLoading}>
-                    {isLoading ? <ActivityIndicator color="#fff" /> : (<><Ionicons name="checkmark-circle" size={18} color="#fff" /><Text style={styles.btnText}>Create account</Text></>)}
-                  </TouchableOpacity>
                 </View>
               </Animated.View>
             )}
 
             {screen === "login" && (
               <Animated.View entering={FadeInUp.duration(300).delay(80)} exiting={FadeOutDown.duration(250)}>
-                <View>
+                <View style = {[styles.loginInputs]}>
                   <Input icon="mail-outline" placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" textContentType="emailAddress" inputHeight={dyn.inputH} />
                   <Input icon="lock-closed-outline" placeholder="Password" value={password} onChangeText={setPassword} autoCapitalize="none" secureTextEntry={secure} rightIcon={secure ? "eye-outline" : "eye-off-outline"} onRightIconPress={() => setSecure(v => !v)} textContentType="password" inputHeight={dyn.inputH} />
 
@@ -628,70 +624,7 @@ export default function AuthScreen(): React.ReactElement {
         </View>
       </KeyboardAvoidingView>
     </View>
+
+    </ImageBackground>
   );
 }
-
-type InputProps = {
-  icon: keyof typeof Ionicons.glyphMap;
-  rightIcon?: keyof typeof Ionicons.glyphMap;
-  onRightIconPress?: () => void;
-  placeholder: string;
-  value: string;
-  onChangeText: (v: string) => void;
-  autoCapitalize?: "none" | "sentences" | "words" | "characters";
-  keyboardType?: any;
-  secureTextEntry?: boolean;
-  textContentType?: any;
-  inputHeight?: number;
-};
-
-function Input(props: InputProps) {
-  const { icon, rightIcon, onRightIconPress, placeholder, value, onChangeText, autoCapitalize, keyboardType, secureTextEntry, textContentType, inputHeight = 48 } = props;
-
-  return (
-    <View style={[styles.inputWrap, { height: inputHeight }]}>
-      <Ionicons name={icon} size={18} color="#93c5fd" style={{ marginRight: 10 }} />
-      <TextInput
-        style={styles.input}
-        placeholder={placeholder}
-        placeholderTextColor="#94a3b8"
-        value={value}
-        onChangeText={onChangeText}
-        autoCapitalize={autoCapitalize}
-        keyboardType={keyboardType}
-        secureTextEntry={secureTextEntry}
-        textContentType={textContentType}
-      />
-      {rightIcon ? (
-        <TouchableOpacity onPress={onRightIconPress} hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}>
-          <Ionicons name={rightIcon} size={18} color="#93c5fd" />
-        </TouchableOpacity>
-      ) : null}
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, width: "100%", backgroundColor: "transparent" },
-  heroWrap: { alignItems: "center" },
-  backButton: { position: "absolute", top: 50, left: 0, padding: 16, zIndex: 10 },
-  heroBadge: { flexDirection: "row", gap: 8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: "rgba(59,130,246,0.1)", alignItems: "center", marginBottom: 12 },
-  heroBadgeText: { color: "#2563eb", fontWeight: "600" },
-  title: { fontWeight: "800", color: "#0f172a", textAlign: "center" },
-  subtitle: { color: "#475569", textAlign: "center", marginTop: 4 },
-  container: { alignItems: "center" },
-  inputWrap: { flexDirection: "row", alignItems: "center", backgroundColor: "#f1f5f9", borderWidth: 1, borderColor: "rgba(59,130,246,0.25)", paddingHorizontal: 12, borderRadius: 14, marginBottom: 12 },
-  input: { flex: 1, color: "#0f172a", fontSize: 16 },
-  btn: { flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center", paddingVertical: 14, borderRadius: 14, width: "100%", marginTop: 10 },
-  btnPrimary: { backgroundColor: "#3b6df6", shadowColor: "#3b82f6", shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
-  btnIndigo: { backgroundColor: "#2563eb", shadowColor: "#2563eb", shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
-  btnGoogle: { backgroundColor: "#ffffff" },
-  btnText: { color: "#fff", fontSize: 16, textAlign: "center", fontWeight: "700" },
-  btnTextDark: { color: "#1e293b" },
-  dividerRow: { flexDirection: "row", alignItems: "center", marginVertical: 10, gap: 8 },
-  divider: { flex: 1, height: 1, backgroundColor: "#e2e8f0" },
-  dividerText: { color: "#ffffff", fontSize: 14 },
-  loadingOverlay: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: "rgba(255,255,255,0.6)", alignItems: "center", justifyContent: "center", gap: 10 },
-  loadingText: { color: "#bfdbfe" },
-  smallText: { paddingTop: 10, fontSize: 15, color: "#dae2f0", textAlign: "center" },
-});
