@@ -5,7 +5,7 @@ const styles = StyleSheet.create({
   heroWrap: { alignItems: "center", marginTop: 30 },
   backButton: { position: "absolute", top: 50, left: 0, padding: 16, zIndex: 10 },
   heroBadge: { flexDirection: "row", gap: 8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: "rgba(59,130,246,0.1)", alignItems: "center", marginBottom: 12 },
-  heroBadgeText: { color: "#2563eb", fontWeight: "600" },
+  heroBadgeText: { color: "#e2e8f5ff", fontWeight: "600" },
   title: { fontWeight: "800", color: "#0f172a", textAlign: "center" },
   subtitle: { color: "#475569", textAlign: "center", marginTop: 4 },
   container: { alignItems: "center" },
@@ -21,7 +21,7 @@ const styles = StyleSheet.create({
   loadingOverlay: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: "rgba(255,255,255,0.6)", alignItems: "center", justifyContent: "center", gap: 10 },
   loadingText: { color: "#bfdbfe" },
   smallText: { paddingTop: 10, fontSize: 15, color: "#5278b9ff", textAlign: "center" },
-  inputWrap: { flexDirection: "row", alignItems: "center", backgroundColor: "#f1f5f9", borderWidth: 1, borderColor: "rgba(59,130,246,0.25)", paddingHorizontal: 12, borderRadius: 14, marginBottom: 12 },
+  inputWrap: { flexDirection: "row", alignItems: "center", backgroundColor: "#ffffffff", borderWidth: 1, borderColor: "rgba(59,130,246,0.25)", paddingHorizontal: 12, borderRadius: 14, marginBottom: 12 },
   input: { flex: 1, color: "#0f172a", fontSize: 16 },
   inputs: {marginBottom: 300},
   loginInputs: {marginBottom: 350}

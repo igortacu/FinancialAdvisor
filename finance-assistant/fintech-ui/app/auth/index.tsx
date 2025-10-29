@@ -5,6 +5,7 @@ import {
   useWindowDimensions,
   ImageBackground,
 } from "react-native";
+import * as SecureStore from 'expo-secure-store';
 import { Colors } from "@/constants/theme";
 import * as AuthSession from "expo-auth-session";
 import { Ionicons } from "@expo/vector-icons";
@@ -59,7 +60,34 @@ export default function AuthScreen(): React.ReactElement {
 
   useEffect(() => {
     if (!authLoading && user) {
-      router.replace("/(tabs)");
+      (async () => {
+        const POST_OAUTH_KEY = 'post_oauth_route';
+        try {
+          let postRoute: string | null = null;
+          if (Platform.OS === 'web') {
+            postRoute = localStorage.getItem(POST_OAUTH_KEY);
+          } else {
+            postRoute = await SecureStore.getItemAsync(POST_OAUTH_KEY);
+          }
+
+          if (postRoute) {
+            // Clear stored flag and navigate to the requested route
+            try {
+              if (Platform.OS === 'web') localStorage.removeItem(POST_OAUTH_KEY);
+              else await SecureStore.deleteItemAsync(POST_OAUTH_KEY);
+            } catch (e) {
+              console.warn('Could not clear post-oauth flag', e);
+            }
+            console.log('➡️ Redirecting to post-OAuth route:', postRoute);
+            router.replace(postRoute as any);
+            return;
+          }
+        } catch (err) {
+          console.warn('Error reading post-OAuth flag:', err);
+        }
+
+        router.replace("/(tabs)");
+      })();
     }
   }, [user, authLoading]);
 
@@ -266,7 +294,7 @@ export default function AuthScreen(): React.ReactElement {
                   setPassword("");
                   setName("");
                   setSurname("");
-                  router.replace("/(tabs)");
+                  router.replace("/cont");
                 }
               },
               {
@@ -285,7 +313,7 @@ export default function AuthScreen(): React.ReactElement {
                   setPassword("");
                   setName("");
                   setSurname("");
-                  router.replace("/(tabs)");
+                  router.replace("/cont");
                 }
               }
             ]
@@ -295,7 +323,7 @@ export default function AuthScreen(): React.ReactElement {
           setPassword("");
           setName("");
           setSurname("");
-          router.replace("./cont.tsx");
+          router.replace("/cont");
         }
       }
     } catch (err: any) {
@@ -556,7 +584,12 @@ export default function AuthScreen(): React.ReactElement {
             {screen === "register" && (
               <Animated.View entering={FadeInUp.duration(300).delay(80)} exiting={FadeOutDown.duration(250)}>
                 <View style = {[styles.inputs]}>
-                  <Input icon="person-circle-outline" placeholder="Name (optional)" value={name} onChangeText={setName} autoCapitalize="words" textContentType="name" inputHeight={dyn.inputH} />
+                  <Input 
+                    icon="person-circle-outline" 
+                    placeholder="Name (optional)" 
+                    value={name} onChangeText={setName} 
+                    autoCapitalize="words" textContentType="name" 
+                    inputHeight={dyn.inputH} />
                   <Input icon="person-outline" placeholder="Surname (optional)" value={surname} onChangeText={setSurname} autoCapitalize="words" textContentType="familyName" inputHeight={dyn.inputH} />
                   <Input icon="mail-outline" placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" textContentType="emailAddress" inputHeight={dyn.inputH} />
                   <Input icon="lock-closed-outline" placeholder="Password (min 6 characters)" value={password} onChangeText={setPassword} autoCapitalize="none" secureTextEntry={secure} rightIcon={secure ? "eye-outline" : "eye-off-outline"} onRightIconPress={() => setSecure(v => !v)} textContentType="password" inputHeight={dyn.inputH} />

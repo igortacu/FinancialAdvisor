@@ -1,6 +1,7 @@
 
 import { useState } from "react";
 import { TouchableOpacity, Text, Platform, Alert, StyleSheet } from "react-native"
+import * as SecureStore from 'expo-secure-store';
 import { Ionicons } from "@expo/vector-icons";
 import { getRedirectTo } from "@/lib/authRedirect";
 import { supabase } from "@/api";
@@ -21,6 +22,17 @@ export default function GoogleLogin({ setIsLoading }: GoogleLoginProps){
     }
     
     try {
+
+      const POST_OAUTH_KEY = 'post_oauth_route';
+      try {
+        if (Platform.OS === 'web') {
+          localStorage.setItem(POST_OAUTH_KEY, '/cont');
+        } else {
+          await SecureStore.setItemAsync(POST_OAUTH_KEY, '/cont');
+        }
+      } catch (e) {
+        console.warn('Could not persist post-OAuth route:', e);
+      }
       setIsGoogleLoading(true);
       setIsLoading(true);
       const redirectUri = getRedirectTo();
