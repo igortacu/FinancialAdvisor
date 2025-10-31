@@ -1,6 +1,5 @@
 import React from "react";
 import { View } from "react-native";
-import { VictoryContainer } from "@/lib/charts";
 
 type Props = {
   height?: number;
@@ -14,11 +13,8 @@ export default function CompactChart({ height = 160, children }: Props) {
       style={{ width: "100%", height }}
       onLayout={(e) => setW(e.nativeEvent.layout.width)}
     >
-      {w > 0 && children(w, height) && (
-        <VictoryContainer responsive={false}>
-          {/* container for typings; Victory receives responsive={false} from callers */}
-        </VictoryContainer>
-      )}
+      {/* Render the actual chart once width is known */}
+      {w > 0 ? children(w, height) : null}
     </View>
   );
 }

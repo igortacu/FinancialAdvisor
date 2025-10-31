@@ -77,6 +77,32 @@ EXPO_PUBLIC_SUPABASE_FN_PROXY_URL=your-supabase-functions-url
 | `npm run test` | Run tests |
 | `npm run build` | Build for production |
 
+## ML Advisor API (local)
+
+For AI-assisted categorization, risk flags, and advice, the app calls a local FastAPI service in the `Forecast/` folder.
+
+1) Install and run the service (in a separate terminal):
+
+```powershell
+cd ..\..\Forecast
+python -m venv .venv; .venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+# Use 8091 to avoid local collisions on 8090
+$env:ML_API_PORT="8091"; $env:ML_API_CORS="*"; python ml_api.py
+```
+
+2) Point the app to it by setting an environment variable before starting Expo:
+
+```powershell
+$env:EXPO_PUBLIC_ML_API_URL="http://localhost:8091"; npx expo start
+```
+
+When active, new transactions (scan/manual) will:
+
+- Auto-categorize via ML service
+- Flag risky transactions and show an advice alert
+- Store ML output under the `meta.ml` field in the ledger row
+
 ## App Screenshots
 
 [Screenshots will be added here]

@@ -24,20 +24,36 @@ Deno.serve(async (req: Request) => {
   const entries = [...url.searchParams].filter(([k]) => k !== "path" && k !== "token");
   const qs = new URLSearchParams(entries).toString();
 
-  const FINNHUB_KEY = Deno.env.get("FINNHUB_KEY");
+  // Allow overriding the FINNHUB key via query param `token` for debugging/local dev.
+  // In production prefer setting FINNHUB_KEY as an environment variable in Supabase.
+  const tokenParam = url.searchParams.get("token");
+  const FINNHUB_KEY = tokenParam ?? Deno.env.get("FINNHUB_KEY");
   if (!FINNHUB_KEY) {
-    return corsify(new Response(JSON.stringify({ error: "Missing FINNHUB_KEY" }), { status: 500, headers: { "content-type": "application/json" } }));
+    return corsify(new Response(JSON.stringify({ error: "Missing FINNHUB_KEY (set env var or pass ?token=...)" }), { status: 500, headers: { "content-type": "application/json" } }));
   }
 
   const upstream = `https://finnhub.io/api/v1/${path}?${qs}`;
-  const r = await fetch(upstream, {
-    headers: {
-      // Finnhub accepts either header or `token=` query param. Header is cleaner.
-      "X-Finnhub-Token": FINNHUB_KEY,
-    },
-  });
+  // Forward request to Finnhub with token in header (preferred).
+  // Add simple error context to help debugging 401/403 responses.
+  let r: Response;
+  try {
+    r = await fetch(upstream, {
+      headers: {
+        "X-Finnhub-Token": FINNHUB_KEY,
+      },
+    });
+  }
+  catch (err) {
+    // Network-level error
+    return corsify(new Response(JSON.stringify({ error: "Upstream fetch failed", detail: String(err) }), { status: 502, headers: { "content-type": "application/json" } }));
+  }
 
   const body = await r.text();
+  // If Finnhub returned 401/403, include upstream body for debugging (may contain JSON error).
+  if (r.status === 401 || r.status === 403) {
+    return corsify(new Response(JSON.stringify({ error: "Upstream authentication/permission error", status: r.status, upstream: body }), { status: r.status, headers: { "content-type": "application/json" } }));
+  }
+
   return corsify(new Response(body, {
     status: r.status,
     headers: { "content-type": "application/json" },
