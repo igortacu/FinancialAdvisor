@@ -54,6 +54,11 @@ export async function getBiometricType(): Promise<string> {
     return 'Biometric';
   }
   
+  // In Expo Go, don't try to check Face ID types
+  if (isExpoGoIOS()) {
+    return 'Face ID';
+  }
+  
   try {
     const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
     
@@ -83,14 +88,9 @@ export async function authenticateWithBiometrics(): Promise<boolean> {
   }
   
   try {
+    // Silently skip Face ID on iOS Expo Go (works fine on Android Expo Go!)
     if (isExpoGoIOS()) {
-      if (!faceIdConfigAlertShown) {
-        Alert.alert(
-          'Face ID not available in this build',
-          'iOS requires NSFaceIDUsageDescription in the app Info.plist. Expo Go cannot apply this. Build a Development Client (EAS Dev Build) or a standalone app to use Face ID.'
-        );
-        faceIdConfigAlertShown = true;
-      }
+      console.log('ℹ️ Face ID unavailable in Expo Go on iOS - silently skipping');
       return false;
     }
 
@@ -110,18 +110,6 @@ export async function authenticateWithBiometrics(): Promise<boolean> {
         error: (result as any).error,
         warning: (result as any).warning,
       });
-    }
-
-    // Handle the common iOS configuration error when running under Expo Go
-    if ((result as any).error === 'missing_usage_description') {
-      if (!faceIdConfigAlertShown) {
-        Alert.alert(
-          'Face ID not available in this build',
-          'iOS requires NSFaceIDUsageDescription in the app Info.plist. Expo Go cannot apply this. Build a Development Client (EAS Dev Build) or a standalone app to use Face ID.'
-        );
-        faceIdConfigAlertShown = true;
-      }
-      return false;
     }
 
     if (result.success) {
@@ -153,9 +141,13 @@ export async function enableBiometricLogin(email: string, password: string, skip
     const supported = await isBiometricSupported();
     
     if (!supported) {
+      const message = isExpoGoIOS() 
+        ? 'Face ID requires a custom build on iOS. It works on Android in Expo Go, or use email/password login.'
+        : 'Your device does not support biometric authentication or it is not set up.';
+      
       Alert.alert(
         'Biometric Not Available',
-        'Your device does not support biometric authentication or it is not set up.'
+        message
       );
       return false;
     }

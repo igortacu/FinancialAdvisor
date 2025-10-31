@@ -45,10 +45,7 @@ export default function AuthScreen(): React.ReactElement {
 
   const hScale = Math.min(height / 800, 1);
   const wScale = Math.max(Math.min(width / 390, 1), 0.85);
-  const redirectTo = Platform.select({
-    web: window.location.origin,
-    default: AuthSession.makeRedirectUri({ scheme: "fintechui" }),
-  })!;
+  const redirectTo = AuthSession.makeRedirectUri({ scheme: "fintechui" });
 
   const title = useMemo(() => {
     if (screen === "register") return "Create account";
@@ -105,7 +102,7 @@ export default function AuthScreen(): React.ReactElement {
         setHasBiometricTriggered(true);
         
   // Auto-trigger biometric login (slight delay for better reliability)
-  console.log(` ${type} login enabled - auto-triggering`);
+  console.log(`👤 ${type} login enabled - auto-triggering`);
   setTimeout(() => handleBiometricLogin(), 800);
       }
     })();
