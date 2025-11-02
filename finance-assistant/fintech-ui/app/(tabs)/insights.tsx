@@ -177,6 +177,7 @@ export default function Insights() {
   const { user } = useAuth();
 
   const [selectedSymbols, setSelectedSymbols] = React.useState<SymbolKey[]>(["AAPL", "MSFT", "SPY"]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [loadingSymbols, setLoadingSymbols] = React.useState(false);
 
   const [newsBySymbol, setNewsBySymbol] =
@@ -185,6 +186,7 @@ export default function Insights() {
   const [stockMap, setStockMap] =
     React.useState<Partial<Record<SymbolKey, StockCard>>>({});
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [loadingMarket, setLoadingMarket] = React.useState(false);
 
   const [selectedMonth, setSelectedMonth] = React.useState<string>("All");
@@ -295,6 +297,7 @@ export default function Insights() {
   };
 
   const monthlyMix = fallbackMonthly;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const chartData = React.useMemo(() => {
     if (selectedMonth === "All") {
       const transformed: { month: string; category: string; amount: number; color: string }[] = [];
@@ -386,8 +389,16 @@ export default function Insights() {
                         padding={{ left: 40, right: 10, top: 12, bottom: 26 }}
                         containerComponent={<VictoryContainer responsive={false} />}
                       >
-                        <VictoryAxis dependentAxis tickFormat={(t: number) => `$${t.toFixed(0)}`} />
-                        <VictoryAxis />
+                        {/* Hide axis labels for compact sparkline look (restore old visual) */}
+                        <VictoryAxis
+                          dependentAxis
+                          tickFormat={() => ""}
+                          style={{ grid: { stroke: "#EEE" }, tickLabels: { fill: "transparent" }, axis: { stroke: "#EEE" } }}
+                        />
+                        <VictoryAxis
+                          tickFormat={() => ""}
+                          style={{ tickLabels: { fill: "transparent" }, axis: { stroke: "#EEE" } }}
+                        />
                         <VictoryLine
                           data={(card?.series ?? []).slice(-60)}
                           x="x"

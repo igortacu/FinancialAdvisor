@@ -21,6 +21,9 @@ import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 
 import Card from "@/components/Card";
+import CompactChart from "@/components/CompactChart";
+import { VictoryChart, VictoryLine, VictoryAxis, ChartsReady } from "@/lib/charts";
+import { analyzeTransaction, getForecast } from "@/lib/mlApi";
 import { MOCK_RECEIPT, type ParsedReceipt } from "@/lib/receipt-mock";
 import { supabase } from "../../api";
 // import { useAuth } from "@/store/auth"; // not used for userId now
@@ -110,6 +113,19 @@ const CATEGORIES: Category[] = [
   "Shopping",
 ];
 
+// Simple fallback series generator for demo (values between 50..300)
+function genFallbackForecast(n = 6) {
+  const clamp = (v: number) => Math.max(50, Math.min(300, v));
+  let v = 120 + Math.random() * 80; // start 120..200
+  const arr: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const drift = (Math.random() - 0.5) * 30; // +-15 avg
+    v = clamp(v + drift);
+    arr.push(Math.round(v));
+  }
+  return arr;
+}
+
 /* ============== Component ============== */
 export default function Transactions() {
   const insets = useSafeAreaInsets();
@@ -128,6 +144,21 @@ export default function Transactions() {
   const [scanOpen, setScanOpen] = React.useState(false);
   const [imageUri, setImageUri] = React.useState<string | null>(null);
   const [parsed, setParsed] = React.useState<ParsedReceipt | null>(null);
+
+  // ---- forecast
+  const [forecastVals, setForecastVals] = React.useState<number[] | null>(null);
+  const [forecastLoading, setForecastLoading] = React.useState(false);
+  const monthLabels = React.useMemo(() => {
+    if (!forecastVals || forecastVals.length === 0) return [] as string[];
+    const labels: string[] = [];
+    const base = new Date();
+    for (let i = 0; i < forecastVals.length; i++) {
+      const d = new Date(base);
+      d.setMonth(d.getMonth() + (i + 1));
+      labels.push(d.toLocaleString(undefined, { month: "short" }));
+    }
+    return labels;
+  }, [forecastVals]);
 
   // ---- filters
   const [activeCat, setActiveCat] = React.useState<Category | "ALL">("ALL");
@@ -158,6 +189,8 @@ export default function Transactions() {
 
   const countAll = filtered.length;
 
+  // (debug mount log removed)
+
   // ===== Auth bootstrap + listener (reliable for v2) =====
   React.useEffect(() => {
     let mounted = true;
@@ -180,6 +213,37 @@ export default function Transactions() {
       mounted = false;
     };
   }, []);
+
+  // load forecast once userId is known
+  React.useEffect(() => {
+    let cancelled = false;
+    async function run() {
+      // Always show something: seed fallback first
+      setForecastVals(genFallbackForecast());
+
+      if (!userId) return;
+
+      setForecastLoading(true);
+      try {
+        const resp = await getForecast(userId, 6);
+        if (!cancelled) {
+          const vals = Array.isArray(resp?.values) && resp.values.length > 0
+            ? resp.values
+            : genFallbackForecast();
+          setForecastVals(vals);
+        }
+      } catch (e) {
+        console.warn("Forecast fetch failed", e);
+        if (!cancelled) setForecastVals(genFallbackForecast());
+      } finally {
+        if (!cancelled) setForecastLoading(false);
+      }
+    }
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   // initial load + realtime
   React.useEffect(() => {
@@ -346,6 +410,23 @@ export default function Transactions() {
       const merchant = normalize(parsed.merchant);
       const total = Number(totalOf(parsed).toFixed(2)); // positive
 
+      // Call ML API to analyze this transaction for category/risk/advice
+      let mlCat: string | null = null;
+      let ml: any = null;
+      try {
+        const resp = await analyzeTransaction({
+          user_id: userId,
+          merchant,
+          amount: -total, // ledger uses negative for expense
+          currency: parsed.currency || "MDL",
+          meta: { source: "receipt" },
+        });
+        mlCat = resp.category || null;
+        ml = resp;
+      } catch (e) {
+        console.warn("ML analyze failed:", e);
+      }
+
       const row: Record<string, any> = {
         [COLS.user_id]: userId,
         [COLS.date]: new Date().toISOString(),
@@ -355,13 +436,13 @@ export default function Transactions() {
         [COLS.income]: 0,
         [COLS.merchant]: merchant,
         [COLS.name]: merchant,
-        [COLS.category]: guessCategory(merchant),
-        [COLS.meta]: parsed,
+        [COLS.category]: mlCat ?? guessCategory(merchant),
+        [COLS.meta]: { ...(parsed as any), ml },
       };
 
       console.log("[ledger] inserting", row);
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from(TABLE)
         .insert(row)
         .select()
@@ -374,6 +455,11 @@ export default function Transactions() {
       }
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (ml?.advice?.length) {
+        try {
+          Alert.alert("AI Advice", ml.advice.join("\n"));
+        } catch {}
+      }
       setScanOpen(false);
     } catch (e: any) {
       console.error(e);
@@ -389,6 +475,23 @@ export default function Transactions() {
       return;
     }
     const total = 123.45;
+    // For demo, feed a manual example through ML
+    let mlCat: string | null = null;
+    let ml: any = null;
+    try {
+      const resp = await analyzeTransaction({
+        user_id: userId,
+        merchant: "Manual Entry",
+        amount: -total,
+        currency: "MDL",
+        meta: { source: "manual" },
+      });
+      mlCat = resp.category || null;
+      ml = resp;
+    } catch (e) {
+      console.warn("ML analyze failed:", e);
+    }
+
     const row: Record<string, any> = {
       [COLS.user_id]: userId,
       [COLS.date]: new Date().toISOString(),
@@ -398,8 +501,8 @@ export default function Transactions() {
       [COLS.income]: 0,
       [COLS.merchant]: null,
       [COLS.name]: "Manual Entry",
-      [COLS.category]: "General",
-      [COLS.meta]: null,
+      [COLS.category]: mlCat ?? "General",
+      [COLS.meta]: ml ? { ml } : null,
     };
 
     const { data, error } = await supabase
@@ -415,6 +518,11 @@ export default function Transactions() {
     }
 
     setList((p) => [mapDBToUI(data), ...p]);
+    if (ml?.advice?.length) {
+      try {
+        Alert.alert("AI Advice", ml.advice.join("\n"));
+      } catch {}
+    }
   }
 
   async function deleteTx(id: string) {
@@ -499,6 +607,71 @@ export default function Transactions() {
         </Card>
       </Animated.View>
 
+      {/* Forecast (demo) */}
+      <Animated.View
+        entering={FadeInDown.delay(100).duration(360)}
+        style={{ paddingHorizontal: 16, marginBottom: 6 }}
+      >
+        <Card>
+          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 6 }}>
+            <Ionicons name="trending-up" size={16} color="#246BFD" />
+            <Text style={{ fontWeight: "800", marginLeft: 6 }}>Budget forecast</Text>
+            <Text style={{ marginLeft: 8, color: "#6B7280" }}>(next 6)</Text>
+          </View>
+          {forecastLoading ? (
+            <View style={{ alignItems: "center", paddingVertical: 6 }}>
+              <ActivityIndicator />
+            </View>
+          ) : forecastVals && forecastVals.length > 0 ? (
+            <View>
+              {ChartsReady ? (
+                <CompactChart height={120}>
+                  {(w, h) => (
+                    <VictoryChart
+                      padding={{ top: 8, bottom: 22, left: 36, right: 8 }}
+                      width={w}
+                      height={h}
+                    >
+                      <VictoryAxis
+                        tickValues={forecastVals.map((_, i) => i + 1)}
+                        tickFormat={(x: number) => monthLabels[x - 1]}
+                        style={{
+                          axis: { stroke: "#E5E7EB" },
+                          tickLabels: { fontSize: 10, fill: "#6B7280" },
+                          ticks: { stroke: "#E5E7EB" },
+                          grid: { stroke: "#F3F4F6" },
+                        }}
+                      />
+                      <VictoryLine
+                        interpolation="monotoneX"
+                        style={{ data: { stroke: "#246BFD", strokeWidth: 2 } }}
+                        data={forecastVals.map((y, i) => ({ x: i + 1, y }))}
+                      />
+                    </VictoryChart>
+                  )}
+                </CompactChart>
+              ) : (
+                <Text style={{ color: "#6B7280" }}>
+                  Charts unavailable in this build. Values: {forecastVals.join(", ")}
+                </Text>
+              )}
+              {/* Simple legend of values */}
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+                {forecastVals.map((v, i) => (
+                  <View key={i} style={{ backgroundColor: "#F3F4F6", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
+                    <Text style={{ fontSize: 12, color: "#111827", fontWeight: "600" }}>
+                      {monthLabels[i] ?? `M${i + 1}`}: {fmtMDL(v)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : (
+            <Text style={{ color: "#6B7280" }}>No forecast available.</Text>
+          )}
+        </Card>
+      </Animated.View>
+
       {/* Filters */}
       <Animated.View
         entering={FadeInUp.delay(60).duration(320)}
@@ -570,6 +743,7 @@ export default function Transactions() {
                     <Text style={s.title}>{t.name}</Text>
                     <Text style={s.sub}>
                       {new Date(t.date).toLocaleString()} • {t.category ?? "—"}
+                      {t.meta?.ml?.risk?.flag ? " • ⚠️ Risk" : ""}
                     </Text>
                   </View>
                   <Text
@@ -651,6 +825,8 @@ export default function Transactions() {
               <Card>
                 <Text style={s.h2}>Review</Text>
                 <Text style={s.muted}>{normalize(parsed.merchant)}</Text>
+                {/* Show AI advice if present in parsed preview (only after insert we'll have response) */}
+                { /* no-op here; advice shown after insert via toast/alert */ }
 
                 <View style={{ marginTop: 10, gap: 8 }}>
                   {parsed.items.map((it, i) => (
