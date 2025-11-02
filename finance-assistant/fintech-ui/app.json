@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "fintechui",
+    "scheme": "exp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -13,8 +13,10 @@
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Pick a receipt photo to parse",
         "NSCameraUsageDescription": "Scan receipts with the camera",
-        "NSFaceIDUsageDescription": "Use Face ID to quickly and securely sign you into your account"
-      }
+        "NSFaceIDUsageDescription": "Use Face ID to quickly and securely sign you into your account",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.ivampyy.fintechui"
     },
     "android": {
       "adaptiveIcon": {
@@ -28,11 +30,8 @@
         "CAMERA"
       ],
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
-    },
-    "web": {
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "predictiveBackGestureEnabled": false,
+      "package": "com.ivampyy.fintechui"
     },
     "plugins": [
       "expo-router",
@@ -53,6 +52,14 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": false
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "bea271af-0a9f-42a2-990f-efdda9de22fd"
+      }
     }
   }
 }
