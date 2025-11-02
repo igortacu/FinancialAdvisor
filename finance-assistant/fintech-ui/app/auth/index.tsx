@@ -282,42 +282,80 @@ export default function AuthScreen(): React.ReactElement {
         if (biometricSupported) {
           const biometricType = await getBiometricType();
           // Ask user if they want to enable biometric login
-          Alert.alert(
-            `Enable ${biometricType}?`,
-            `Would you like to use ${biometricType} to sign in? This will allow you to sign in without entering your password.`,
-            [
+
+
+
+            // Make this part work on web not just on mobile
+            if (Platform.OS === "web") {
+            const confirmed = window.confirm(
+              `Enable ${biometricType}?\n\nWould you like to use ${biometricType} to sign in? This will allow you to sign in without entering your password.`
+            );
+
+            if (!confirmed) {
+              setEmail("");
+              setPassword("");
+              setName("");
+              setSurname("");
+              router.replace("/cont");
+            } else {
+              try {
+              console.log(`🔐 Enabling ${biometricType} (web)...`);
+              const success = await enableBiometricLogin(e, p);
+              if (success) {
+                console.log(`✅ ${biometricType} enabled successfully (web)`);
+                window.alert(`${biometricType} has been enabled. Next time you can sign in with just your face!`);
+              } else {
+                console.log(`❌ Failed to enable ${biometricType} (web)`);
+              }
+              } catch (err) {
+              console.error("Error enabling biometric on web:", err);
+              window.alert("Failed to enable biometric login. Please try again.");
+              } finally {
+              setEmail("");
+              setPassword("");
+              setName("");
+              setSurname("");
+              router.replace("/cont");
+              }
+            }
+            } else {
+            Alert.alert(
+              `Enable ${biometricType}?`,
+              `Would you like to use ${biometricType} to sign in? This will allow you to sign in without entering your password.`,
+              [
               {
                 text: "Not Now",
                 style: "cancel",
                 onPress: () => {
-                  setEmail("");
-                  setPassword("");
-                  setName("");
-                  setSurname("");
-                  router.replace("/cont");
+                setEmail("");
+                setPassword("");
+                setName("");
+                setSurname("");
+                router.replace("/cont");
                 }
               },
               {
                 text: "Enable",
                 onPress: async () => {
-                  console.log(`🔐 Enabling ${biometricType}...`);
-                  const success = await enableBiometricLogin(e, p);
-                  if (success) {
-                    console.log(`✅ ${biometricType} enabled successfully`);
-                    Alert.alert(
-                      "Success",
-                      `${biometricType} has been enabled. Next time you can sign in with just your face!`
-                    );
-                  }
-                  setEmail("");
-                  setPassword("");
-                  setName("");
-                  setSurname("");
-                  router.replace("/cont");
+                console.log(`🔐 Enabling ${biometricType}...`);
+                const success = await enableBiometricLogin(e, p);
+                if (success) {
+                  console.log(`✅ ${biometricType} enabled successfully`);
+                  Alert.alert(
+                  "Success",
+                  `${biometricType} has been enabled. Next time you can sign in with just your face!`
+                  );
+                }
+                setEmail("");
+                setPassword("");
+                setName("");
+                setSurname("");
+                router.replace("/cont");
                 }
               }
-            ]
-          );
+              ]
+            );
+            }
         } else {
           setEmail("");
           setPassword("");
@@ -593,9 +631,7 @@ export default function AuthScreen(): React.ReactElement {
                   <Input icon="person-outline" placeholder="Surname (optional)" value={surname} onChangeText={setSurname} autoCapitalize="words" textContentType="familyName" inputHeight={dyn.inputH} />
                   <Input icon="mail-outline" placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" textContentType="emailAddress" inputHeight={dyn.inputH} />
                   <Input icon="lock-closed-outline" placeholder="Password (min 6 characters)" value={password} onChangeText={setPassword} autoCapitalize="none" secureTextEntry={secure} rightIcon={secure ? "eye-outline" : "eye-off-outline"} onRightIconPress={() => setSecure(v => !v)} textContentType="password" inputHeight={dyn.inputH} />
-                  <CreateButton isLoading = {isLoading} handleRegister={() => {
-                      handleRegister();
-                  }}/>
+                  <CreateButton isLoading = {isLoading} handleRegister={handleRegister}/>
 
                 </View>
               </Animated.View>
