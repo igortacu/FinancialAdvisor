@@ -42,3 +42,6 @@ ron.traineddata
 # Allow essential UI images in assets
 !**/assets/images/*.jpg
 !**/assets/images/*.png
+
+
+.env
