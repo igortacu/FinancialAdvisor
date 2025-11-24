@@ -377,24 +377,30 @@ export default function Investments(): React.ReactElement {
       style={[s.root, { paddingTop: insets.top + 6 }]}
       contentContainerStyle={{ padding: 16, paddingBottom: 140, gap: 12 }}
       showsVerticalScrollIndicator={false}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      refreshControl={
+        <RefreshControl 
+          refreshing={refreshing} 
+          onRefresh={onRefresh}
+          accessibilityLabel="Pull to refresh investments"
+        />
+      }
     >
       {/* Snapshot */}
       <Animated.View entering={FadeInUp.duration(320)}>
         <Card>
-          <Text style={s.h1}>Snapshot</Text>
-          <View style={s.kpiRow}>
-            <View style={s.kpi}>
+          <Text style={s.h1} accessibilityRole="header">Snapshot</Text>
+          <View style={s.kpiRow} accessibilityRole="summary">
+            <View style={s.kpi} accessibilityLabel={`Portfolio value: ${money(derived.totalValue)}`}>
               <Text style={s.kpiLabel}>Value</Text>
               <Text style={s.kpiValue}>{money(derived.totalValue)}</Text>
             </View>
-            <View style={s.kpi}>
+            <View style={s.kpi} accessibilityLabel={`Day profit or loss: ${money(derived.dayPL)}`}>
               <Text style={s.kpiLabel}>Day P/L</Text>
               <Text style={[s.kpiValue, { color: derived.dayPL >= 0 ? "#16a34a" : "#ef4444" }]}>
                 {money(derived.dayPL)}
               </Text>
             </View>
-            <View style={s.kpi}>
+            <View style={s.kpi} accessibilityLabel={`Total profit or loss: ${money(derived.totalPL)}`}>
               <Text style={s.kpiLabel}>Total P/L</Text>
               <Text style={[s.kpiValue, { color: derived.totalPL >= 0 ? "#16a34a" : "#ef4444" }]}>
                 {money(derived.totalPL)}
@@ -402,19 +408,19 @@ export default function Investments(): React.ReactElement {
             </View>
           </View>
           <View style={[s.kpiRow, { marginTop: 8 }]}>
-            <View style={s.kpi}>
+            <View style={s.kpi} accessibilityLabel={`Benchmark SPY year to date: ${pct(derived.benchYtd)}`}>
               <Text style={s.kpiLabel}>Benchmark (SPY YTD)</Text>
               <Text style={[s.kpiValue, { color: derived.benchYtd >= 0 ? "#16a34a" : "#ef4444" }]}>
                 {pct(derived.benchYtd)}
               </Text>
             </View>
-            <View style={s.kpi}>
+            <View style={s.kpi} accessibilityLabel={`Top holding weight: ${nf.format((derived.topWeight || 0) * 100)} percent`}>
               <Text style={s.kpiLabel}>Top Weight</Text>
               <Text style={s.kpiValue}>{nf.format((derived.topWeight || 0) * 100)}%</Text>
             </View>
           </View>
           {derived.topWeight > 0.2 && (
-            <View style={s.notice}>
+            <View style={s.notice} accessibilityRole="alert">
               <Text style={s.noticeText}>
                 Risk: top position {Math.round(derived.topWeight * 100)}% of portfolio.
               </Text>
@@ -432,7 +438,7 @@ export default function Investments(): React.ReactElement {
       {ChartsReady && (
         <Animated.View entering={FadeInUp.duration(360)}>
           <Card>
-            <Text style={s.h1}>Allocation (sectors)</Text>
+            <Text style={s.h1} accessibilityRole="header">Allocation (sectors)</Text>
             <CompactChart height={190}>
               {(w, h) => (
                 <VictoryPie
@@ -457,7 +463,7 @@ export default function Investments(): React.ReactElement {
       {ChartsReady && (
         <Animated.View entering={FadeInUp.delay(80).duration(360)}>
           <Card>
-            <Text style={s.h1}>Weights by holding</Text>
+            <Text style={s.h1} accessibilityRole="header">Weights by holding</Text>
             <CompactChart height={200}>
               {(w, h) => (
                 <VictoryChart
@@ -489,7 +495,7 @@ export default function Investments(): React.ReactElement {
       {ChartsReady && (
         <Animated.View entering={FadeInUp.delay(120).duration(360)}>
           <Card>
-            <Text style={s.h1}>P/L by holding</Text>
+            <Text style={s.h1} accessibilityRole="header">P/L by holding</Text>
             <CompactChart height={200}>
               {(w, h) => (
                 <VictoryChart
@@ -523,7 +529,7 @@ export default function Investments(): React.ReactElement {
       {ChartsReady && (
         <Animated.View entering={FadeInUp.delay(160).duration(360)}>
           <Card>
-            <Text style={s.h1}>Benchmark drawdown (SPY YTD)</Text>
+            <Text style={s.h1} accessibilityRole="header">Benchmark drawdown (SPY YTD)</Text>
             <CompactChart height={190}>
               {(w, h) => (
                 <VictoryChart
@@ -561,7 +567,7 @@ export default function Investments(): React.ReactElement {
       {ChartsReady && (
         <Animated.View entering={FadeInUp.delay(200).duration(360)}>
           <Card>
-            <Text style={s.h1}>Rolling volatility (SPY · 30D)</Text>
+            <Text style={s.h1} accessibilityRole="header">Rolling volatility (SPY · 30D)</Text>
             <CompactChart height={190}>
               {(w, h) => (
                 <VictoryChart
@@ -606,7 +612,7 @@ export default function Investments(): React.ReactElement {
       {ChartsReady && (
         <Animated.View entering={FadeInUp.delay(240).duration(360)}>
           <Card>
-            <Text style={s.h1}>Positions (sparklines)</Text>
+            <Text style={s.h1} accessibilityRole="header">Positions (sparklines)</Text>
             <View style={{ marginTop: 8, gap: 10 }}>
               {(mockSparks as SparkPosition[]).map((p) => (
                 <View key={p.id} style={s.row}>
@@ -650,15 +656,21 @@ export default function Investments(): React.ReactElement {
       {/* Holdings list with live prices */}
       <Animated.View entering={FadeInUp.delay(280).duration(360)}>
         <Card>
-          <Text style={s.h1}>Your investments</Text>
+          <Text style={s.h1} accessibilityRole="header">Your investments</Text>
           {loading ? (
-            <View style={{ paddingVertical: 16 }}>
-              <ActivityIndicator />
+            <View style={{ paddingVertical: 16 }} accessibilityLabel="Loading investments">
+              <ActivityIndicator accessibilityLabel="Loading indicator" />
             </View>
           ) : err ? (
             <>
-              <Text style={{ color: "#ef4444", marginTop: 8 }}>{err}</Text>
-              <TouchableOpacity style={s.retry} onPress={onRefresh}>
+              <Text style={{ color: "#ef4444", marginTop: 8 }} accessibilityRole="alert">{err}</Text>
+              <TouchableOpacity 
+                style={s.retry} 
+                onPress={onRefresh}
+                accessibilityLabel="Retry loading investments"
+                accessibilityRole="button"
+                accessibilityHint="Double tap to retry loading your investment data"
+              >
                 <Text style={s.retryText}>Retry</Text>
               </TouchableOpacity>
             </>
@@ -668,7 +680,12 @@ export default function Investments(): React.ReactElement {
                 const value = h.quantity * h.current_price;
                 const pnl = h.quantity * (h.current_price - h.avg_price);
                 return (
-                  <View key={h.id} style={s.row}>
+                  <View 
+                    key={h.id} 
+                    style={s.row}
+                    accessibilityLabel={`${h.symbol}${h.name ? `, ${h.name}` : ""}. Quantity ${h.quantity} at ${money(h.avg_price)}. Value ${money(value)}. Profit or loss ${money(pnl)}`}
+                    accessibilityRole="text"
+                  >
                     <View style={{ flex: 1 }}>
                       <Text style={s.symbol}>
                         {h.symbol}
@@ -693,7 +710,7 @@ export default function Investments(): React.ReactElement {
       {ChartsReady && (
         <Animated.View entering={FadeInUp.delay(320).duration(360)}>
           <Card>
-            <Text style={s.h1}>Dividends (next 30–45 days)</Text>
+            <Text style={s.h1} accessibilityRole="header">Dividends (next 30–45 days)</Text>
             <CompactChart height={180}>
               {(w, h) => (
                 <VictoryChart
@@ -725,7 +742,7 @@ export default function Investments(): React.ReactElement {
       {ChartsReady && (
         <Animated.View entering={FadeInUp.delay(360).duration(360)}>
           <Card>
-            <Text style={s.h1}>DCA cumulative (mock)</Text>
+            <Text style={s.h1} accessibilityRole="header">DCA cumulative (mock)</Text>
             <CompactChart height={180}>
               {(w, h) => {
                 const seq = [200, 100, 200, 100, 200, 100, 200];
