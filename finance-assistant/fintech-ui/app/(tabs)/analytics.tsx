@@ -414,6 +414,13 @@ export default function Analytics() {
   const singleMonthChartWidth = Math.min(screenWidth - 64, 350);
   const forecastChartWidth = Math.min(screenWidth - 64, 350);
 
+  // Determine effective current month based on device date
+  const monthsInData = React.useMemo(() => fallbackMonthly.map((m) => m.month), []);
+  const { abbr: sysMonthName, name: sysMonthLong } = getCurrentMonth();
+  const effectiveCurrentMonth = monthsInData.includes(sysMonthName)
+    ? sysMonthName
+    : monthsInData[monthsInData.length - 1];
+
   const [currency] = React.useState("USD");
 
   // sample totals for current pie
