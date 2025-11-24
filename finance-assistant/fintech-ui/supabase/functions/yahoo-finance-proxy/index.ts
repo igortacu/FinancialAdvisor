@@ -7,21 +7,29 @@ declare const Deno: {
   env: { get(k: string): string | undefined };
 };
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Requested-With, Accept, Origin",
+  "Access-Control-Max-Age": "86400",
+};
+
 function corsify(res: Response) {
   const h = new Headers(res.headers);
-  h.set("Access-Control-Allow-Origin", "*");
-  h.set("Access-Control-Allow-Methods", "GET,OPTIONS");
-  h.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  for (const [key, value] of Object.entries(CORS_HEADERS)) {
+    h.set(key, value);
+  }
   return new Response(res.body, { status: res.status, headers: h });
 }
 
 function jsonResponse(data: unknown, status = 200) {
-  return corsify(
-    new Response(JSON.stringify(data), {
-      status,
-      headers: { "content-type": "application/json" },
-    })
-  );
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 
+      "content-type": "application/json",
+      ...CORS_HEADERS,
+    },
+  });
 }
 
 // Yahoo Finance v8 API endpoints (no key required)

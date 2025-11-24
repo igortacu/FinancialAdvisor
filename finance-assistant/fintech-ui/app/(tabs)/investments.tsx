@@ -152,18 +152,19 @@ async function fetchYahooQuotes(symbols: string[]): Promise<Record<string, Quote
   
   try {
     let url: string;
+    let headers: HeadersInit = {};
     
     if (USE_PROXY && SUPABASE_URL) {
       // Use Supabase Edge Function proxy (avoids CORS on web)
       url = `${SUPABASE_URL}/functions/v1/yahoo-finance-proxy?action=quote&symbols=${symbols.join(",")}`;
+      // Don't send custom headers to proxy - CORS won't allow them
     } else {
       // Direct API call (works on mobile)
       url = `https://query1.finance.yahoo.com/v8/finance/quote?symbols=${symbols.join(",")}`;
+      headers = { "User-Agent": "Mozilla/5.0" };
     }
     
-    const r = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-    });
+    const r = await fetch(url, { headers });
     
     if (!r.ok) {
       console.warn(`Yahoo quotes failed: ${r.status}`);
@@ -196,18 +197,19 @@ async function fetchYahooQuotes(symbols: string[]): Promise<Record<string, Quote
 async function fetchYahooChart(symbol: string, range = "1y", interval = "1d"): Promise<number[]> {
   try {
     let url: string;
+    let headers: HeadersInit = {};
     
     if (USE_PROXY && SUPABASE_URL) {
       // Use Supabase Edge Function proxy
       url = `${SUPABASE_URL}/functions/v1/yahoo-finance-proxy?action=chart&symbols=${symbol}&range=${range}&interval=${interval}`;
+      // Don't send custom headers to proxy - CORS won't allow them
     } else {
       // Direct API call
       url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}`;
+      headers = { "User-Agent": "Mozilla/5.0" };
     }
     
-    const r = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-    });
+    const r = await fetch(url, { headers });
     
     if (!r.ok) {
       console.warn(`Yahoo chart failed for ${symbol}: ${r.status}`);
