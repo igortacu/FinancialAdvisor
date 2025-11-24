@@ -6,14 +6,14 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  ActivityIndicator,
   Modal,
   TouchableWithoutFeedback,
   Platform,
   Dimensions,
-  UIManager, // Added UIManager import
+  UIManager,
   TextInput,
   Switch,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInUp } from "react-native-reanimated";
@@ -60,6 +60,18 @@ function getCurrentMonth() {
   return { index, abbr, name };
 }
 
+// ---------- Types for chart data ----------
+interface PieChartDatum {
+  x: string;
+  y: number;
+}
+
+interface IncomeExpenseEvent {
+  day: number;
+  amount: number;
+  label: string;
+}
+
 // ---------- mocked data ----------
 const fallbackMonthly = [
   { month: "Jan", needs: 1200, wants: 700, savings: 400 },
@@ -71,10 +83,10 @@ const fallbackMonthly = [
   { month: "Jul", needs: 1500, wants: 700, savings: 500 },
   { month: "Aug", needs: 1800, wants: 1000, savings: 800 },
   { month: "Sep", needs: 1600, wants: 900, savings: 700 },
-  // Added remaining months so the current month can be selected and edited
-  { month: "Oct", needs: 0, wants: 0, savings: 0 },
-  { month: "Nov", needs: 0, wants: 0, savings: 0 },
-  { month: "Dec", needs: 0, wants: 0, savings: 0 },
+  // Q4 months with realistic projected/estimated values
+  { month: "Oct", needs: 1550, wants: 850, savings: 650 },
+  { month: "Nov", needs: 1700, wants: 950, savings: 600 },
+  { month: "Dec", needs: 1900, wants: 1200, savings: 500 },
 ];
 
 const fallbackCash7d = [
@@ -140,20 +152,24 @@ function KPI({
 }) {
   return (
     <Card style={{ flex: 1 }}>
-      <Text style={{ color: "#6B7280", fontSize: 12 }}>{label}</Text>
-      <Text style={{ fontSize: 22, fontWeight: "800", marginTop: 4 }}>
-        {value}
-      </Text>
-      {delta ? (
-        <Text
-          style={{
-            color: delta.startsWith("+") ? "#16a34a" : "#ef4444",
-            marginTop: 2,
-          }}
-        >
-          {delta}
+      <View accessibilityRole="summary" accessibilityLabel={`${label}: ${value}${delta ? `, change: ${delta}` : ''}`}>
+        <Text style={{ color: "#6B7280", fontSize: 12 }} accessibilityRole="text">{label}</Text>
+        <Text style={{ fontSize: 22, fontWeight: "800", marginTop: 4 }} accessibilityRole="text">
+          {value}
         </Text>
-      ) : null}
+        {delta ? (
+          <Text
+            style={{
+              color: delta.startsWith("+") ? "#16a34a" : "#ef4444",
+              marginTop: 2,
+            }}
+            accessibilityRole="text"
+            accessibilityLabel={`Change: ${delta}`}
+          >
+            {delta}
+          </Text>
+        ) : null}
+      </View>
     </Card>
   );
 }
@@ -244,6 +260,8 @@ function BreakdownRow({
 }
 
 // ---------- Modal-based MonthDropdown (always above charts) ----------
+import type { StyleProp, ViewStyle, TextStyle } from "react-native";
+
 function MonthDropdown({
   value,
   options,
@@ -254,8 +272,8 @@ function MonthDropdown({
   value: string;
   options: string[];
   onChange: (v: string) => void;
-  buttonStyle: any;
-  buttonTextStyle: any;
+  buttonStyle: StyleProp<ViewStyle>;
+  buttonTextStyle: StyleProp<TextStyle>;
 }) {
   // View on native; HTMLElement on web
   const btnRef = React.useRef<View | null>(null);
@@ -304,9 +322,16 @@ function MonthDropdown({
   return (
     <>
       {/* On web, the ref will become an HTMLElement; on native, a View */}
-      <Pressable ref={btnRef} style={buttonStyle} onPress={openMenu}>
+      <Pressable 
+        ref={btnRef} 
+        style={buttonStyle} 
+        onPress={openMenu}
+        accessibilityRole="button"
+        accessibilityLabel={`Select month, currently ${value === "All" ? "All Months" : value}`}
+        accessibilityHint="Opens month selection dropdown"
+      >
         <Text style={buttonTextStyle}>{value === "All" ? "All Months" : value}</Text>
-        <Text style={{ fontSize: 12, color: "#6B7280", marginLeft: 8, fontWeight: "600" }}>
+        <Text style={{ fontSize: 12, color: "#6B7280", marginLeft: 8, fontWeight: "600" }} accessibilityElementsHidden>
           {open ? "▲" : "▼"}
         </Text>
       </Pressable>
@@ -382,16 +407,13 @@ function MonthDropdown({
 // ---------- Screen ----------
 export default function Analytics() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
+  const { width: screenWidth } = useWindowDimensions();
+  
+  // Responsive chart width (accounting for padding)
+  const chartWidth = Math.min(screenWidth - 64, 450);
+  const singleMonthChartWidth = Math.min(screenWidth - 64, 350);
+  const forecastChartWidth = Math.min(screenWidth - 64, 350);
 
-  // Determine effective current month based on device date; if absent in data, use last month in data
-  const monthsInData = React.useMemo(() => fallbackMonthly.map((m) => m.month), []);
-  const { abbr: sysMonthName, name: sysMonthLong } = getCurrentMonth();
-  const effectiveCurrentMonth = monthsInData.includes(sysMonthName)
-    ? sysMonthName
-    : monthsInData[monthsInData.length - 1];
-
-  const [loadingAgg] = React.useState(false);
   const [currency] = React.useState("USD");
 
   // sample totals for current pie
@@ -589,25 +611,8 @@ export default function Analytics() {
                     { x: "General", y: 14 },
                   ]}
                   colorScale={["#246BFD", "#5b76f7", "#9db7ff", "#cfe3ff", "#e5edff"]}
-                  labels={({ datum }: any) => `${datum.x}\n${datum.y}%`}
-                  style={{ labels: { fontSize: 11, fill: "#374151", fontWeight: "600", padding: 14 } }}
-                  events={[{
-                    target: "data",
-                    eventHandlers: {
-                      onPressIn: () => {
-                        return [
-                          {
-                            target: "data",
-                            mutation: (props: any) => {
-                              const cat = props.datum.x;
-                              router.push({ pathname: "/transactions", params: { category: cat } });
-                              return null;
-                            }
-                          }
-                        ];
-                      }
-                    }
-                  }]}
+                  labels={({ datum }: { datum: PieChartDatum }) => `${datum.x}\n${datum.y}%`}
+                  style={{ labels: { fontSize: 12, fill: "#111827" } }}
                 />
               </View>
             </Card>
@@ -618,10 +623,7 @@ export default function Analytics() {
           <Animated.View entering={FadeInUp.delay(140).duration(420)}>
             <Card>
               <Text style={s.h1}>50/30/20 — Current vs Goal</Text>
-              {loadingAgg ? (
-                <ActivityIndicator />
-              ) : (
-                <View style={s.piesRow}>
+              <View style={s.piesRow}>
                   <View style={{ alignItems: "center" }}>
                     <Text style={s.pieChartTitle}>Current</Text>
                     <VictoryPie
@@ -649,7 +651,6 @@ export default function Analytics() {
                     />
                   </View>
                 </View>
-              )}
 
               {/* Legend */}
               <View style={{ marginTop: 16, gap: 8 }}>
@@ -699,11 +700,11 @@ export default function Analytics() {
 
               {/* Budget controls: only enabled for the current month */}
               {isCurrentMonthSelected ? (
-                <View style={s.budgetControls}>
+                <View style={s.budgetControls} accessibilityLabel="Budget settings for current month">
                   <View style={s.budgetRow}>
                     <View style={s.budgetItem}>
-                      <View style={[s.legendDot, { backgroundColor: "#EF4444" }]} />
-                      <Text style={s.budgetLabel}>Needs</Text>
+                      <View style={[s.legendDot, { backgroundColor: "#EF4444" }]} accessibilityElementsHidden />
+                      <Text style={s.budgetLabel} nativeID="needs-label">Needs</Text>
                       <TextInput
                         style={s.budgetInput}
                         keyboardType="numeric"
@@ -711,11 +712,13 @@ export default function Analytics() {
                         onChangeText={(t) => setBudget("needs", t)}
                         placeholder="0"
                         editable
+                        accessibilityLabel="Needs budget amount"
+                        accessibilityLabelledBy="needs-label"
                       />
                     </View>
                     <View style={s.budgetItem}>
-                      <View style={[s.legendDot, { backgroundColor: "#F59E0B" }]} />
-                      <Text style={s.budgetLabel}>Wants</Text>
+                      <View style={[s.legendDot, { backgroundColor: "#F59E0B" }]} accessibilityElementsHidden />
+                      <Text style={s.budgetLabel} nativeID="wants-label">Wants</Text>
                       <TextInput
                         style={s.budgetInput}
                         keyboardType="numeric"
@@ -723,11 +726,13 @@ export default function Analytics() {
                         onChangeText={(t) => setBudget("wants", t)}
                         placeholder="0"
                         editable
+                        accessibilityLabel="Wants budget amount"
+                        accessibilityLabelledBy="wants-label"
                       />
                     </View>
                     <View style={s.budgetItem}>
-                      <View style={[s.legendDot, { backgroundColor: "#10B981" }]} />
-                      <Text style={s.budgetLabel}>Savings</Text>
+                      <View style={[s.legendDot, { backgroundColor: "#10B981" }]} accessibilityElementsHidden />
+                      <Text style={s.budgetLabel} nativeID="savings-label">Savings</Text>
                       <TextInput
                         style={s.budgetInput}
                         keyboardType="numeric"
@@ -735,12 +740,20 @@ export default function Analytics() {
                         onChangeText={(t) => setBudget("savings", t)}
                         placeholder="0"
                         editable
+                        accessibilityLabel="Savings budget amount"
+                        accessibilityLabelledBy="savings-label"
                       />
                     </View>
                   </View>
                   <View style={s.carryoverRow}>
-                    <Text style={s.carryoverLabel}>Carryover unused budget</Text>
-                    <Switch value={carryover} onValueChange={setCarryover} />
+                    <Text style={s.carryoverLabel} nativeID="carryover-label">Carryover unused budget</Text>
+                    <Switch 
+                      value={carryover} 
+                      onValueChange={setCarryover}
+                      accessibilityLabel="Carryover unused budget toggle"
+                      accessibilityRole="switch"
+                      accessibilityState={{ checked: carryover }}
+                    />
                   </View>
                 </View>
               ) : (
@@ -767,14 +780,10 @@ export default function Analytics() {
                 </View>
               ) : null}
 
-              {loadingAgg ? (
-                <ActivityIndicator />
-              ) : (
-                <>
-                  <View style={s.trendsChartWrap}>
+              <View style={s.trendsChartWrap}>
                     {selectedMonth === "All" ? (
                       <VictoryChart
-                        width={450}
+                        width={chartWidth}
                         height={300}
                         padding={{ left: 70, right: 30, top: 30, bottom: 50 }}
                         domainPadding={{ x: 40, y: [0, 50] }}
@@ -841,7 +850,7 @@ export default function Analytics() {
                       </VictoryChart>
                     ) : (
                       <VictoryChart
-                        width={350}
+                        width={singleMonthChartWidth}
                         height={300}
                         padding={{ left: 70, right: 30, top: 30, bottom: 50 }}
                         domainPadding={{ x: 80, y: [0, 50] }}
@@ -977,8 +986,6 @@ export default function Analytics() {
                       );
                     })}
                   </View>
-                </>
-              )}
             </Card>
           </Animated.View>
 
@@ -990,11 +997,7 @@ export default function Analytics() {
                 Total Received: {formatMoney(received7d, currency)}
               </Text>
 
-              {loadingAgg ? (
-                <ActivityIndicator />
-              ) : (
-                <>
-                  <CompactChart height={170}>
+              <CompactChart height={170}>
                     {(w, h) => (
                       <VictoryChart
                         width={w}
@@ -1024,9 +1027,6 @@ export default function Analytics() {
                       </View>
                     ))}
                   </View>
-                </>
-              )
-              }
             </Card>
           </Animated.View>
 {/* Cash Flow Forecast (30/90 days)  */}
@@ -1035,13 +1035,16 @@ export default function Analytics() {
     <View style={s.sectionHeader}>
       <Text style={s.h1}>Cash Flow Forecast</Text>
       
-      <View style={s.periodSelector}>
+      <View style={s.periodSelector} accessibilityRole="radiogroup" accessibilityLabel="Forecast period selector">
         <Pressable
           onPress={() => setForecastPeriod("30")}
           style={[
             s.periodButton,
             forecastPeriod === "30" && s.periodButtonActive,
           ]}
+          accessibilityRole="radio"
+          accessibilityState={{ checked: forecastPeriod === "30" }}
+          accessibilityLabel="30 day forecast"
         >
           <Text
             style={[
@@ -1058,6 +1061,9 @@ export default function Analytics() {
             s.periodButton,
             forecastPeriod === "90" && s.periodButtonActive,
           ]}
+          accessibilityRole="radio"
+          accessibilityState={{ checked: forecastPeriod === "90" }}
+          accessibilityLabel="90 day forecast"
         >
           <Text
             style={[
@@ -1096,8 +1102,8 @@ export default function Analytics() {
     {/* Chart with Income & Expense Events */}
     <View style={s.chartContainer}>
       <VictoryChart
-        width={350}
-        height={350}
+        width={forecastChartWidth}
+        height={250}
         padding={{ left: 60, right: 40, top: 30, bottom: 40 }}
         domain={{ 
           x: [0, forecastPeriod === "30" ? 30 : 90],
