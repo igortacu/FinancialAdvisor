@@ -6,7 +6,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  ActivityIndicator,
   Modal,
   TouchableWithoutFeedback,
   Platform,
@@ -388,7 +387,6 @@ export default function Analytics() {
   const singleMonthChartWidth = Math.min(screenWidth - 64, 350);
   const forecastChartWidth = Math.min(screenWidth - 64, 350);
 
-  const [loadingAgg] = React.useState(false);
   const [currency] = React.useState("USD");
 
   // sample totals for current pie
@@ -566,10 +564,7 @@ export default function Analytics() {
           <Animated.View entering={FadeInUp.delay(140).duration(420)}>
             <Card>
               <Text style={s.h1}>50/30/20 — Current vs Goal</Text>
-              {loadingAgg ? (
-                <ActivityIndicator />
-              ) : (
-                <View style={s.piesRow}>
+              <View style={s.piesRow}>
                   <View style={{ alignItems: "center" }}>
                     <Text style={s.pieChartTitle}>Current</Text>
                     <VictoryPie
@@ -597,7 +592,6 @@ export default function Analytics() {
                     />
                   </View>
                 </View>
-              )}
 
               {/* Legend */}
               <View style={{ marginTop: 16, gap: 8 }}>
@@ -715,11 +709,7 @@ export default function Analytics() {
                 </View>
               ) : null}
 
-              {loadingAgg ? (
-                <ActivityIndicator />
-              ) : (
-                <>
-                  <View style={s.trendsChartWrap}>
+              <View style={s.trendsChartWrap}>
                     {selectedMonth === "All" ? (
                       <VictoryChart
                         width={chartWidth}
@@ -925,8 +915,6 @@ export default function Analytics() {
                       );
                     })}
                   </View>
-                </>
-              )}
             </Card>
           </Animated.View>
 
@@ -938,11 +926,7 @@ export default function Analytics() {
                 Total Received: {formatMoney(received7d, currency)}
               </Text>
 
-              {loadingAgg ? (
-                <ActivityIndicator />
-              ) : (
-                <>
-                  <CompactChart height={170}>
+              <CompactChart height={170}>
                     {(w, h) => (
                       <VictoryChart
                         width={w}
@@ -972,9 +956,6 @@ export default function Analytics() {
                       </View>
                     ))}
                   </View>
-                </>
-              )
-              }
             </Card>
           </Animated.View>
 {/* Cash Flow Forecast (30/90 days)  */}
