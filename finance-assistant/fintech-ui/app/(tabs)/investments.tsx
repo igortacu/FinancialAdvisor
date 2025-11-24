@@ -113,6 +113,109 @@ type Point = { x: number | string; y: number };
 type PieChartDatum = { x: string; y: number };
 type BarChartDatum = { x: string; y: number };
 
+/* ================== Brokerage Types ================== */
+type Brokerage = {
+  id: string;
+  name: string;
+  shortName: string;
+  description: string;
+  icon: string;
+  color: string;
+  accentColor: string;
+  accountType: string;
+  accountNumber: string;
+  holdings: Holding[];
+  dividends: Dividend[];
+};
+
+type ConnectionStep = {
+  id: number;
+  label: string;
+  icon: string;
+  duration: number;
+};
+
+/* ================== Brokerage Data ================== */
+const BROKERAGES: Brokerage[] = [
+  {
+    id: "ibkr",
+    name: "Interactive Brokers",
+    shortName: "IBKR",
+    description: "Stocks & ETFs Portfolio",
+    icon: "📊",
+    color: "#D41F2C",
+    accentColor: "#FEE2E2",
+    accountType: "Individual Brokerage",
+    accountNumber: "****4821",
+    holdings: [
+      { id: 1, symbol: "AAPL", name: "Apple Inc.", quantity: 12, avg_price: 178.50, current_price: 178.50, sector: "Tech" },
+      { id: 2, symbol: "MSFT", name: "Microsoft Corp.", quantity: 8, avg_price: 378.25, current_price: 378.25, sector: "Tech" },
+      { id: 3, symbol: "VOO", name: "Vanguard S&P 500 ETF", quantity: 5, avg_price: 485.00, current_price: 485.00, sector: "ETF" },
+      { id: 4, symbol: "TSLA", name: "Tesla Inc.", quantity: 6, avg_price: 242.80, current_price: 242.80, sector: "Auto" },
+      { id: 5, symbol: "NVDA", name: "NVIDIA Corp.", quantity: 4, avg_price: 875.00, current_price: 875.00, sector: "Tech" },
+      { id: 6, symbol: "GOOGL", name: "Alphabet Inc.", quantity: 3, avg_price: 165.40, current_price: 165.40, sector: "Tech" },
+      { id: 7, symbol: "CASH", name: "Cash Reserve", quantity: 2500, avg_price: 1, current_price: 1, sector: "Cash" },
+    ],
+    dividends: [
+      { id: "d1", symbol: "AAPL", date: "2025-12-05", amount: 2.88 },
+      { id: "d2", symbol: "VOO", date: "2025-12-15", amount: 11.50 },
+      { id: "d3", symbol: "MSFT", date: "2025-12-20", amount: 5.60 },
+    ],
+  },
+  {
+    id: "coinbase",
+    name: "Coinbase",
+    shortName: "CB",
+    description: "Crypto Portfolio",
+    icon: "🪙",
+    color: "#0052FF",
+    accentColor: "#DBEAFE",
+    accountType: "Crypto Wallet",
+    accountNumber: "****7392",
+    holdings: [
+      { id: 1, symbol: "BTC", name: "Bitcoin", quantity: 0.85, avg_price: 42000, current_price: 97500, sector: "Crypto" },
+      { id: 2, symbol: "ETH", name: "Ethereum", quantity: 4.2, avg_price: 2200, current_price: 3450, sector: "Crypto" },
+      { id: 3, symbol: "SOL", name: "Solana", quantity: 45, avg_price: 85, current_price: 245, sector: "Crypto" },
+      { id: 4, symbol: "LINK", name: "Chainlink", quantity: 120, avg_price: 12.50, current_price: 18.75, sector: "Crypto" },
+      { id: 5, symbol: "USDC", name: "USD Coin", quantity: 5000, avg_price: 1, current_price: 1, sector: "Stablecoin" },
+    ],
+    dividends: [],
+  },
+  {
+    id: "fidelity",
+    name: "Fidelity",
+    shortName: "FID",
+    description: "Retirement Account",
+    icon: "🏦",
+    color: "#4AA564",
+    accentColor: "#D1FAE5",
+    accountType: "Roth IRA",
+    accountNumber: "****9156",
+    holdings: [
+      { id: 1, symbol: "VTI", name: "Vanguard Total Stock", quantity: 35, avg_price: 220, current_price: 268, sector: "ETF" },
+      { id: 2, symbol: "VXUS", name: "Vanguard Intl Stock", quantity: 40, avg_price: 55, current_price: 62, sector: "ETF" },
+      { id: 3, symbol: "BND", name: "Vanguard Total Bond", quantity: 25, avg_price: 74, current_price: 72, sector: "Bonds" },
+      { id: 4, symbol: "SCHD", name: "Schwab Dividend ETF", quantity: 20, avg_price: 72, current_price: 81, sector: "ETF" },
+      { id: 5, symbol: "QQQ", name: "Invesco QQQ Trust", quantity: 8, avg_price: 380, current_price: 505, sector: "ETF" },
+      { id: 6, symbol: "CASH", name: "Cash Reserve", quantity: 1200, avg_price: 1, current_price: 1, sector: "Cash" },
+    ],
+    dividends: [
+      { id: "d1", symbol: "VTI", date: "2025-12-18", amount: 8.75 },
+      { id: "d2", symbol: "SCHD", date: "2025-12-22", amount: 12.40 },
+    ],
+  },
+];
+
+const CONNECTION_STEPS: ConnectionStep[] = [
+  { id: 1, label: "Connecting to server...", icon: "🔗", duration: 800 },
+  { id: 2, label: "Authenticating...", icon: "🔐", duration: 1200 },
+  { id: 3, label: "Verifying credentials...", icon: "✓", duration: 600 },
+  { id: 4, label: "Fetching account data...", icon: "📥", duration: 1000 },
+  { id: 5, label: "Syncing positions...", icon: "📊", duration: 800 },
+  { id: 6, label: "Loading market data...", icon: "📈", duration: 700 },
+  { id: 7, label: "Finalizing...", icon: "✨", duration: 400 },
+];
+
 /* ================== Config ================== */
 // Public values only. Server secret stays in Edge Function.
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
@@ -312,6 +415,12 @@ async function fetchYahooChart(symbol: string, range = "1y", interval = "1d"): P
 export default function Investments(): React.ReactElement {
   const insets = useSafeAreaInsets();
 
+  // Brokerage connection state
+  const [selectedBroker, setSelectedBroker] = React.useState<Brokerage | null>(null);
+  const [isConnecting, setIsConnecting] = React.useState(false);
+  const [connectionStep, setConnectionStep] = React.useState(0);
+  const [isConnected, setIsConnected] = React.useState(false);
+
   const [holdings, setHoldings] = React.useState<Holding[]>(MOCK_HOLDINGS);
   const [quoteData, setQuoteData] = React.useState<Record<string, QuoteData>>({});
   const [spy, setSpy] = React.useState<number[]>([]);
@@ -456,7 +565,210 @@ export default function Investments(): React.ReactElement {
     };
   }, [holdings, spy, quoteData]);
 
-  /* ===== UI ===== */
+  /* ===== Broker Connection Handler ===== */
+  const handleSelectBroker = React.useCallback((broker: Brokerage) => {
+    setSelectedBroker(broker);
+    setIsConnecting(true);
+    setConnectionStep(0);
+    
+    // Animate through connection steps
+    let stepIndex = 0;
+    const runStep = () => {
+      if (stepIndex < CONNECTION_STEPS.length) {
+        setConnectionStep(stepIndex);
+        setTimeout(() => {
+          stepIndex++;
+          runStep();
+        }, CONNECTION_STEPS[stepIndex].duration);
+      } else {
+        // Connection complete
+        setTimeout(() => {
+          setIsConnecting(false);
+          setIsConnected(true);
+          // Load the broker's holdings
+          setHoldings(broker.holdings);
+        }, 300);
+      }
+    };
+    runStep();
+  }, []);
+
+  const handleDisconnect = React.useCallback(() => {
+    setSelectedBroker(null);
+    setIsConnected(false);
+    setConnectionStep(0);
+    setHoldings(MOCK_HOLDINGS);
+  }, []);
+
+  /* ===== Broker Selection Screen ===== */
+  if (!isConnected && !isConnecting) {
+    return (
+      <View style={[s.root, { paddingTop: insets.top + 6 }]}>
+        <ScrollView 
+          contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header */}
+          <Animated.View entering={FadeInUp.duration(400)}>
+            <Text style={s.brokerTitle}>Connect Your Brokerage</Text>
+            <Text style={s.brokerSubtitle}>
+              Select an account to view your portfolio and real-time market data
+            </Text>
+          </Animated.View>
+
+          {/* Broker Cards */}
+          <View style={{ marginTop: 24, gap: 16 }}>
+            {BROKERAGES.map((broker, index) => {
+              const totalValue = broker.holdings.reduce(
+                (acc, h) => acc + h.quantity * h.current_price, 0
+              );
+              const totalPL = broker.holdings.reduce(
+                (acc, h) => acc + h.quantity * (h.current_price - h.avg_price), 0
+              );
+              const isProfit = totalPL >= 0;
+              
+              return (
+                <Animated.View 
+                  key={broker.id}
+                  entering={FadeInUp.delay(200 + index * 100).duration(400)}
+                >
+                  <TouchableOpacity
+                    style={[s.brokerCard, { borderColor: broker.color + "40" }]}
+                    onPress={() => handleSelectBroker(broker)}
+                    activeOpacity={0.7}
+                  >
+                    {/* Accent Strip */}
+                    <View style={[s.brokerAccent, { backgroundColor: broker.color }]} />
+                    
+                    {/* Card Content */}
+                    <View style={s.brokerCardContent}>
+                      {/* Header Row */}
+                      <View style={s.brokerCardHeader}>
+                        <View style={[s.brokerIcon, { backgroundColor: broker.accentColor }]}>
+                          <Text style={{ fontSize: 24 }}>{broker.icon}</Text>
+                        </View>
+                        <View style={{ flex: 1, marginLeft: 12 }}>
+                          <Text style={s.brokerName}>{broker.name}</Text>
+                          <Text style={s.brokerType}>{broker.accountType}</Text>
+                        </View>
+                        <View style={[s.brokerBadge, { backgroundColor: broker.accentColor }]}>
+                          <Text style={[s.brokerBadgeText, { color: broker.color }]}>
+                            {broker.accountNumber}
+                          </Text>
+                        </View>
+                      </View>
+                      
+                      {/* Description */}
+                      <Text style={s.brokerDescription}>{broker.description}</Text>
+                      
+                      {/* Stats Row */}
+                      <View style={s.brokerStats}>
+                        <View style={s.brokerStat}>
+                          <Text style={s.brokerStatLabel}>Portfolio Value</Text>
+                          <Text style={s.brokerStatValue}>{money(totalValue)}</Text>
+                        </View>
+                        <View style={s.brokerStat}>
+                          <Text style={s.brokerStatLabel}>Total Return</Text>
+                          <Text style={[s.brokerStatValue, { color: isProfit ? CHART_COLORS.positive : CHART_COLORS.negative }]}>
+                            {isProfit ? "+" : ""}{money(totalPL)}
+                          </Text>
+                        </View>
+                        <View style={s.brokerStat}>
+                          <Text style={s.brokerStatLabel}>Holdings</Text>
+                          <Text style={s.brokerStatValue}>{broker.holdings.length}</Text>
+                        </View>
+                      </View>
+                      
+                      {/* Connect Button */}
+                      <View style={[s.brokerConnectBtn, { backgroundColor: broker.color }]}>
+                        <Text style={s.brokerConnectText}>Connect Account →</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                </Animated.View>
+              );
+            })}
+          </View>
+          
+          {/* Security Note */}
+          <Animated.View entering={FadeInUp.delay(600).duration(400)} style={s.securityNote}>
+            <Text style={s.securityIcon}>🔒</Text>
+            <Text style={s.securityText}>
+              Your credentials are encrypted and never stored. We use secure OAuth connections.
+            </Text>
+          </Animated.View>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  /* ===== Connection Animation Screen ===== */
+  if (isConnecting && selectedBroker) {
+    const currentStep = CONNECTION_STEPS[connectionStep];
+    const progress = ((connectionStep + 1) / CONNECTION_STEPS.length) * 100;
+    
+    return (
+      <View style={[s.root, s.connectionScreen, { paddingTop: insets.top + 20 }]}>
+        <Animated.View entering={FadeInUp.duration(400)} style={s.connectionContent}>
+          {/* Broker Icon */}
+          <View style={[s.connectionIcon, { backgroundColor: selectedBroker.accentColor }]}>
+            <Text style={{ fontSize: 48 }}>{selectedBroker.icon}</Text>
+          </View>
+          
+          {/* Broker Name */}
+          <Text style={s.connectionTitle}>{selectedBroker.name}</Text>
+          <Text style={s.connectionSubtitle}>Establishing secure connection...</Text>
+          
+          {/* Progress Bar */}
+          <View style={s.progressContainer}>
+            <View style={s.progressBar}>
+              <Animated.View 
+                style={[
+                  s.progressFill, 
+                  { width: `${progress}%`, backgroundColor: selectedBroker.color }
+                ]} 
+              />
+            </View>
+            <Text style={s.progressPercent}>{Math.round(progress)}%</Text>
+          </View>
+          
+          {/* Current Step */}
+          <View style={s.stepContainer}>
+            <Animated.View 
+              key={connectionStep}
+              entering={FadeInUp.duration(200)}
+              style={s.stepContent}
+            >
+              <Text style={s.stepIcon}>{currentStep?.icon}</Text>
+              <Text style={s.stepLabel}>{currentStep?.label}</Text>
+            </Animated.View>
+          </View>
+          
+          {/* Steps Timeline */}
+          <View style={s.timeline}>
+            {CONNECTION_STEPS.map((step, index) => (
+              <View key={step.id} style={s.timelineItem}>
+                <View style={[
+                  s.timelineDot,
+                  index < connectionStep && { backgroundColor: selectedBroker.color },
+                  index === connectionStep && { backgroundColor: selectedBroker.color, transform: [{ scale: 1.3 }] },
+                  index > connectionStep && { backgroundColor: "#E2E8F0" },
+                ]} />
+                {index < CONNECTION_STEPS.length - 1 && (
+                  <View style={[
+                    s.timelineLine,
+                    index < connectionStep && { backgroundColor: selectedBroker.color },
+                  ]} />
+                )}
+              </View>
+            ))}
+          </View>
+        </Animated.View>
+      </View>
+    );
+  }
+
+  /* ===== Main UI (Connected) ===== */
   return (
     <ScrollView
       style={[s.root, { paddingTop: insets.top + 6 }]}
@@ -470,6 +782,34 @@ export default function Investments(): React.ReactElement {
         />
       }
     >
+      {/* Connected Broker Banner */}
+      {selectedBroker && (
+        <Animated.View entering={FadeInUp.duration(280)}>
+          <View style={s.connectedHeader}>
+            <View style={s.connectedHeaderLeft}>
+              <View style={[s.connectedHeaderIcon, { backgroundColor: selectedBroker.accentColor }]}>
+                <Text style={{ fontSize: 20 }}>{selectedBroker.icon}</Text>
+              </View>
+              <View>
+                <Text style={s.connectedHeaderName}>{selectedBroker.name}</Text>
+                <View style={s.connectedHeaderStatus}>
+                  <View style={s.connectedDot} />
+                  <Text style={s.connectedHeaderType}>{selectedBroker.accountType}</Text>
+                </View>
+              </View>
+            </View>
+            <TouchableOpacity 
+              style={s.switchAccountBtn}
+              onPress={handleDisconnect}
+              accessibilityLabel="Switch brokerage account"
+            >
+              <Text style={s.switchAccountText}>Switch</Text>
+              <Text style={{ fontSize: 12 }}>🔄</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      )}
+
       {/* Snapshot */}
       <Animated.View entering={FadeInUp.duration(320)}>
         <Card>
@@ -543,9 +883,8 @@ export default function Investments(): React.ReactElement {
                   height={h}
                   innerRadius={62}
                   padAngle={3}
-                  cornerRadius={6}
                   labelRadius={90}
-                  animate={{ duration: 800, easing: "backOut" }}
+                  animate={{ duration: 800 }}
                   data={derived.allocPie.length ? derived.allocPie : [{ x: "Unclassified", y: 100 }]}
                   colorScale={PIE_COLORS}
                   labels={({ datum }: { datum: PieChartDatum }) => `${datum.x}\n${nf.format(datum.y)}%`}
@@ -584,7 +923,7 @@ export default function Investments(): React.ReactElement {
                   height={h}
                   padding={{ left: 52, right: 16, top: 16, bottom: 36 }}
                   containerComponent={<VictoryContainer responsive={false} />}
-                  animate={{ duration: 600, easing: "backOut" }}
+                  animate={{ duration: 600 }}
                   domainPadding={{ x: 20 }}
                 >
                   <VictoryAxis
@@ -605,7 +944,6 @@ export default function Investments(): React.ReactElement {
                   />
                   <VictoryBar
                     data={derived.weightBars.length ? derived.weightBars : [{ x: "N/A", y: 0 }]}
-                    cornerRadius={{ top: 6 }}
                     barRatio={0.65}
                     style={{ 
                       data: { 
@@ -621,58 +959,75 @@ export default function Investments(): React.ReactElement {
         </Animated.View>
       )}
 
-      {/* P/L contribution */}
+      {/* P/L contribution - Modern Card Layout */}
       {ChartsReady && (
         <Animated.View entering={FadeInUp.delay(120).duration(360)}>
           <Card>
             <View style={s.chartHeader}>
-              <Text style={s.h1} accessibilityRole="header">Profit / Loss</Text>
+              <Text style={s.h1} accessibilityRole="header">Performance</Text>
               <View style={[s.chartBadge, { backgroundColor: derived.totalPL >= 0 ? "#ECFDF5" : "#FEF2F2" }]}>
                 <Text style={[s.chartBadgeText, { color: derived.totalPL >= 0 ? CHART_COLORS.positive : CHART_COLORS.negative }]}>
-                  {derived.totalPL >= 0 ? "▲" : "▼"} {money(Math.abs(derived.totalPL))}
+                  {derived.totalPL >= 0 ? "+" : ""}{money(derived.totalPL)}
                 </Text>
               </View>
             </View>
-            <CompactChart height={220}>
-              {(w, h) => (
-                <VictoryChart
-                  width={w}
-                  height={h}
-                  padding={{ left: 56, right: 16, top: 16, bottom: 36 }}
-                  containerComponent={<VictoryContainer responsive={false} />}
-                  animate={{ duration: 600, easing: "backOut" }}
-                  domainPadding={{ x: 20 }}
-                >
-                  <VictoryAxis
-                    dependentAxis
-                    tickFormat={(t: number) => money(t)}
-                    style={axisStyleClean}
-                  />
-                  <VictoryAxis 
-                    style={{
-                      ...axisStyleClean,
-                      tickLabels: { 
-                        ...axisStyleClean.tickLabels, 
-                        fontSize: 11,
-                        fontWeight: "600" as const,
-                        angle: -15,
-                      }
-                    }} 
-                  />
-                  <VictoryBar
-                    data={derived.pnlBars.length ? derived.pnlBars : [{ x: "N/A", y: 0 }]}
-                    cornerRadius={({ datum }: { datum: BarChartDatum }) => datum.y >= 0 ? { top: 6 } : { bottom: 6 }}
-                    barRatio={0.65}
-                    style={{
-                      data: ({ datum }: { datum: BarChartDatum }) => ({ 
-                        fill: datum.y >= 0 ? CHART_COLORS.positive : CHART_COLORS.negative,
-                        fillOpacity: 0.9,
-                      }),
-                    }}
-                  />
-                </VictoryChart>
-              )}
-            </CompactChart>
+            
+            {/* Total P/L Hero */}
+            <View style={s.plHero}>
+              <Text style={s.plHeroLabel}>Total Return</Text>
+              <Text style={[s.plHeroValue, { color: derived.totalPL >= 0 ? CHART_COLORS.positive : CHART_COLORS.negative }]}>
+                {derived.totalPL >= 0 ? "+" : ""}{money(derived.totalPL)}
+              </Text>
+              <View style={[s.plHeroChip, { backgroundColor: derived.totalPL >= 0 ? "#D1FAE5" : "#FEE2E2" }]}>
+                <Text style={[s.plHeroChipText, { color: derived.totalPL >= 0 ? "#065F46" : "#991B1B" }]}>
+                  {derived.totalPL >= 0 ? "▲" : "▼"} {((derived.totalPL / (derived.totalValue - derived.totalPL)) * 100).toFixed(2)}%
+                </Text>
+              </View>
+            </View>
+
+            {/* Individual Holdings P/L */}
+            <View style={{ marginTop: 16, gap: 10 }}>
+              {holdings.filter(h => h.symbol !== "CASH").map((h) => {
+                const pnl = h.quantity * (h.current_price - h.avg_price);
+                const pnlPercent = ((h.current_price - h.avg_price) / h.avg_price) * 100;
+                const isPositive = pnl >= 0;
+                const maxPnl = Math.max(...holdings.filter(x => x.symbol !== "CASH").map(x => Math.abs(x.quantity * (x.current_price - x.avg_price))));
+                const barWidth = Math.min(Math.abs(pnl) / maxPnl * 100, 100);
+                
+                return (
+                  <View key={h.id} style={s.plCard}>
+                    <View style={s.plCardHeader}>
+                      <View style={s.plCardSymbolWrap}>
+                        <View style={[s.plCardDot, { backgroundColor: isPositive ? CHART_COLORS.positive : CHART_COLORS.negative }]} />
+                        <Text style={s.plCardSymbol}>{h.symbol}</Text>
+                      </View>
+                      <Text style={[s.plCardValue, { color: isPositive ? CHART_COLORS.positive : CHART_COLORS.negative }]}>
+                        {isPositive ? "+" : ""}{money(pnl)}
+                      </Text>
+                    </View>
+                    <View style={s.plCardBarBg}>
+                      <Animated.View 
+                        style={[
+                          s.plCardBar, 
+                          { 
+                            width: `${barWidth}%`,
+                            backgroundColor: isPositive ? CHART_COLORS.positive : CHART_COLORS.negative,
+                          }
+                        ]} 
+                      />
+                    </View>
+                    <View style={s.plCardFooter}>
+                      <Text style={s.plCardFooterText}>
+                        {h.quantity} shares @ {money(h.avg_price)}
+                      </Text>
+                      <Text style={[s.plCardPercent, { color: isPositive ? CHART_COLORS.positive : CHART_COLORS.negative }]}>
+                        {isPositive ? "+" : ""}{pnlPercent.toFixed(2)}%
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
           </Card>
         </Animated.View>
       )}
@@ -694,7 +1049,7 @@ export default function Investments(): React.ReactElement {
                   height={h}
                   padding={{ left: 52, right: 16, top: 16, bottom: 32 }}
                   containerComponent={<VictoryContainer responsive={false} />}
-                  animate={{ duration: 700, easing: "cubicInOut" }}
+                  animate={{ duration: 600 }}
                 >
                   <VictoryAxis
                     dependentAxis
@@ -746,7 +1101,7 @@ export default function Investments(): React.ReactElement {
                   height={h}
                   padding={{ left: 52, right: 16, top: 16, bottom: 32 }}
                   containerComponent={<VictoryContainer responsive={false} />}
-                  animate={{ duration: 700, easing: "cubicInOut" }}
+                  animate={{ duration: 600 }}
                 >
                   <VictoryAxis
                     dependentAxis
@@ -781,76 +1136,107 @@ export default function Investments(): React.ReactElement {
         </Animated.View>
       )}
 
-      {/* Positions (sparklines) - Real-time from portfolio */}
+      {/* Live Positions - Modern Glass Design */}
       {ChartsReady && (
         <Animated.View entering={FadeInUp.delay(240).duration(360)}>
-          <Card>
-            <View style={s.chartHeader}>
-              <Text style={s.h1} accessibilityRole="header">Positions</Text>
-              <View style={[s.chartBadge, { backgroundColor: "#F0FDF4" }]}>
-                <Text style={[s.chartBadgeText, { color: CHART_COLORS.positive }]}>Real-time</Text>
+          <View style={s.positionsContainer}>
+            <View style={s.positionsHeader}>
+              <View>
+                <Text style={s.positionsTitle}>Market Watch</Text>
+                <Text style={s.positionsSubtitle}>Real-time price updates</Text>
+              </View>
+              <View style={s.liveIndicator}>
+                <View style={s.liveDot} />
+                <Text style={s.liveText}>LIVE</Text>
               </View>
             </View>
-            <View style={{ marginTop: 12, gap: 12 }}>
-              {holdings.filter(h => h.symbol !== "CASH").map((h) => {
+            
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 4, gap: 12 }}
+              style={{ marginHorizontal: -16, paddingVertical: 8 }}
+            >
+              {holdings.filter(h => h.symbol !== "CASH").map((h, index) => {
                 const quote = quoteData[h.symbol];
                 const changePercent = quote?.changePercent ?? 0;
+                const changeDollar = (quote?.change ?? 0);
                 const isPositive = changePercent >= 0;
-                // Generate mini sparkline from recent movement (simulated from change)
+                const value = h.quantity * h.current_price;
+                
+                // Generate sparkline data
                 const basePrice = quote?.previousClose ?? h.current_price;
-                const sparkData = Array.from({ length: 16 }, (_, i) => {
-                  const progress = i / 15;
-                  const noise = (Math.random() - 0.5) * 0.002 * basePrice;
-                  return basePrice + (h.current_price - basePrice) * progress + noise;
+                const sparkData = Array.from({ length: 24 }, (_, i) => {
+                  const progress = i / 23;
+                  const trend = (h.current_price - basePrice) * progress;
+                  const volatility = Math.sin(i * 0.8) * 0.002 * basePrice;
+                  const noise = (Math.random() - 0.5) * 0.001 * basePrice;
+                  return basePrice + trend + volatility + noise;
                 });
-                const sparkColor = isPositive ? CHART_COLORS.positive : CHART_COLORS.negative;
+                
+                const accentColor = isPositive ? "#10B981" : "#EF4444";
+                const bgColor = isPositive ? "#ECFDF5" : "#FEF2F2";
                 
                 return (
-                  <View key={h.id} style={s.sparkRow}>
-                    <View style={{ flex: 1, minWidth: 80 }}>
-                      <Text style={s.sparkSymbol}>{h.symbol}</Text>
-                      <View style={[s.changeChip, { backgroundColor: isPositive ? "#F0FDF4" : "#FEF2F2" }]}>
-                        <Text
-                          style={[
-                            s.changeChipText,
-                            { color: isPositive ? CHART_COLORS.positive : CHART_COLORS.negative },
-                          ]}
-                        >
-                          {isPositive ? "▲" : "▼"} {Math.abs(changePercent).toFixed(2)}%
-                        </Text>
+                  <Animated.View 
+                    key={h.id} 
+                    entering={FadeInUp.delay(260 + index * 60).duration(350)}
+                  >
+                    <View style={[s.tickerCard, { borderColor: accentColor + "30" }]}>
+                      {/* Header */}
+                      <View style={s.tickerHeader}>
+                        <View style={[s.tickerBadge, { backgroundColor: bgColor }]}>
+                          <Text style={[s.tickerBadgeText, { color: accentColor }]}>{h.symbol}</Text>
+                        </View>
+                        <View style={[s.tickerChange, { backgroundColor: bgColor }]}>
+                          <Text style={[s.tickerChangeText, { color: accentColor }]}>
+                            {isPositive ? "+" : ""}{changePercent.toFixed(2)}%
+                          </Text>
+                        </View>
+                      </View>
+                      
+                      {/* Price */}
+                      <Text style={s.tickerPrice}>{money(h.current_price)}</Text>
+                      <Text style={[s.tickerDelta, { color: accentColor }]}>
+                        {isPositive ? "+" : ""}{money(changeDollar)} today
+                      </Text>
+                      
+                      {/* Mini Chart */}
+                      <View style={[s.tickerChartWrap, { backgroundColor: bgColor, borderRadius: 8 }]}>
+                        <CompactChart height={55}>
+                          {(w, ht) => (
+                            <VictoryChart
+                              width={w}
+                              height={ht}
+                              padding={{ left: 0, right: 0, top: 8, bottom: 8 }}
+                              containerComponent={<VictoryContainer responsive={false} />}
+                            >
+                              <VictoryLine
+                                data={sparkData.map((y: number, i: number) => ({ x: i, y }))}
+                                interpolation="monotoneX"
+                                style={{ 
+                                  data: { 
+                                    stroke: accentColor, 
+                                    strokeWidth: 2.5,
+                                  } 
+                                }}
+                              />
+                            </VictoryChart>
+                          )}
+                        </CompactChart>
+                      </View>
+                      
+                      {/* Footer */}
+                      <View style={s.tickerFooter}>
+                        <Text style={s.tickerShares}>{h.quantity} shares</Text>
+                        <Text style={s.tickerValue}>{money(value)}</Text>
                       </View>
                     </View>
-                    <View style={{ flexBasis: 140 }}>
-                      <CompactChart height={48}>
-                        {(w, ht) => (
-                          <VictoryChart
-                            width={w}
-                            height={ht}
-                            padding={{ left: 4, right: 4, top: 6, bottom: 6 }}
-                            containerComponent={<VictoryContainer responsive={false} />}
-                          >
-                            <VictoryArea
-                              data={sparkData.map((y: number, i: number) => ({ x: i + 1, y }))}
-                              interpolation="monotoneX"
-                              style={{ 
-                                data: { 
-                                  fill: sparkColor,
-                                  fillOpacity: 0.15,
-                                  stroke: sparkColor, 
-                                  strokeWidth: 2,
-                                  strokeLinecap: "round",
-                                } 
-                              }}
-                            />
-                          </VictoryChart>
-                        )}
-                      </CompactChart>
-                    </View>
-                  </View>
+                  </Animated.View>
                 );
               })}
-            </View>
-          </Card>
+            </ScrollView>
+          </View>
         </Animated.View>
       )}
 
@@ -929,7 +1315,7 @@ export default function Investments(): React.ReactElement {
                   height={h}
                   padding={{ left: 52, right: 16, top: 16, bottom: 36 }}
                   containerComponent={<VictoryContainer responsive={false} />}
-                  animate={{ duration: 600, easing: "backOut" }}
+                  animate={{ duration: 600 }}
                   domainPadding={{ x: 20 }}
                 >
                   <VictoryAxis
@@ -945,7 +1331,6 @@ export default function Investments(): React.ReactElement {
                   />
                   <VictoryBar
                     data={MOCK_DIVIDENDS.map((d) => ({ x: d.date.slice(5), y: d.amount }))}
-                    cornerRadius={{ top: 5 }}
                     barRatio={0.6}
                     style={{ 
                       data: { 
@@ -985,7 +1370,7 @@ export default function Investments(): React.ReactElement {
                     height={h}
                     padding={{ left: 52, right: 16, top: 16, bottom: 32 }}
                     containerComponent={<VictoryContainer responsive={false} />}
-                    animate={{ duration: 700, easing: "cubicInOut" }}
+                    animate={{ duration: 600 }}
                   >
                     <VictoryAxis
                       dependentAxis
@@ -1127,4 +1512,697 @@ const s = StyleSheet.create({
     borderRadius: 10,
   },
   retryText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  
+  // P/L Hero Section
+  plHero: {
+    marginTop: 16,
+    alignItems: "center",
+    paddingVertical: 20,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  plHeroLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#64748B",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  plHeroValue: {
+    fontSize: 36,
+    fontWeight: "800",
+    marginTop: 4,
+  },
+  plHeroChip: {
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  plHeroChipText: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  
+  // P/L Card Styles
+  plCard: {
+    backgroundColor: "#FAFBFC",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  plCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  plCardSymbolWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  plCardDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  plCardSymbol: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#1E293B",
+  },
+  plCardValue: {
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  plCardBarBg: {
+    marginTop: 12,
+    height: 6,
+    backgroundColor: "#E2E8F0",
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  plCardBar: {
+    height: "100%",
+    borderRadius: 3,
+  },
+  plCardFooter: {
+    marginTop: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  plCardFooterText: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  plCardPercent: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  
+  // Premium Position Card Styles
+  positionCard: {
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  positionTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  positionLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  positionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  positionIconText: {
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  positionSymbol: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#1E293B",
+  },
+  positionShares: {
+    fontSize: 13,
+    color: "#64748B",
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  positionRight: {
+    alignItems: "flex-end",
+  },
+  positionPrice: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#1E293B",
+  },
+  positionChangeChip: {
+    marginTop: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  positionChangeText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  positionChartWrap: {
+    marginTop: 12,
+    marginHorizontal: -8,
+  },
+  positionBottomRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+  },
+  positionValueLabel: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  positionValue: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#1E293B",
+  },
+  
+  // Market Watch / Ticker Styles
+  positionsContainer: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 0,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  positionsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 4,
+  },
+  positionsTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#1E293B",
+  },
+  positionsSubtitle: {
+    fontSize: 13,
+    color: "#64748B",
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  liveIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#ECFDF5",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#10B981",
+  },
+  liveText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#10B981",
+    letterSpacing: 1,
+  },
+  tickerCard: {
+    width: 165,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  tickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  tickerBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  tickerBadgeText: {
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  tickerChange: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  tickerChangeText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  tickerPrice: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#1E293B",
+    marginTop: 12,
+  },
+  tickerDelta: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  tickerChartWrap: {
+    marginTop: 10,
+    marginHorizontal: -4,
+    overflow: "hidden",
+  },
+  tickerFooter: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+  },
+  tickerShares: {
+    fontSize: 11,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  tickerValue: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1E293B",
+    marginTop: 2,
+  },
+
+  // Brokerage Selection Styles
+  brokerTitle: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#1E293B",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  brokerSubtitle: {
+    fontSize: 15,
+    color: "#64748B",
+    textAlign: "center",
+    marginBottom: 32,
+    lineHeight: 22,
+  },
+  brokerCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    marginBottom: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  brokerAccent: {
+    height: 4,
+    width: "100%",
+  },
+  brokerCardContent: {
+    padding: 20,
+  },
+  brokerCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  brokerIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 14,
+  },
+  brokerName: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1E293B",
+    marginBottom: 2,
+  },
+  brokerType: {
+    fontSize: 13,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  brokerBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: "auto",
+  },
+  brokerBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  brokerDescription: {
+    fontSize: 14,
+    color: "#64748B",
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  brokerStats: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+    marginBottom: 16,
+  },
+  brokerStat: {
+    alignItems: "center",
+  },
+  brokerStatLabel: {
+    fontSize: 11,
+    color: "#94A3B8",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  brokerStatValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1E293B",
+  },
+  brokerConnectBtn: {
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  brokerConnectText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: 0.3,
+  },
+
+  // Connection Animation Overlay
+  connectOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(15, 23, 42, 0.95)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
+  },
+  connectModal: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 28,
+    padding: 32,
+    width: "85%",
+    maxWidth: 340,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.25,
+    shadowRadius: 40,
+    elevation: 20,
+  },
+  connectLogo: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  connectBrokerName: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#1E293B",
+    marginBottom: 28,
+  },
+  connectSteps: {
+    width: "100%",
+    marginBottom: 24,
+  },
+  connectStepRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  connectStepIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 14,
+  },
+  connectStepLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+    flex: 1,
+  },
+  connectProgress: {
+    width: "100%",
+    height: 6,
+    backgroundColor: "#E2E8F0",
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  connectProgressFill: {
+    height: "100%",
+    borderRadius: 3,
+  },
+
+  // Connected State Banner
+  connectedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F0FDF4",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+  },
+  connectedBannerText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#16A34A",
+    marginLeft: 8,
+  },
+  disconnectBtn: {
+    alignSelf: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    marginTop: 16,
+  },
+  disconnectText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#94A3B8",
+  },
+
+  // Security Note
+  securityNote: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
+    padding: 16,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  securityIcon: {
+    fontSize: 16,
+    marginRight: 10,
+  },
+  securityText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#64748B",
+    lineHeight: 18,
+  },
+
+  // Connection Animation Screen
+  connectionScreen: {
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  connectionContent: {
+    alignItems: "center",
+    paddingHorizontal: 32,
+    width: "100%",
+    maxWidth: 360,
+  },
+  connectionIcon: {
+    width: 120,
+    height: 120,
+    borderRadius: 32,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 28,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  connectionTitle: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#1E293B",
+    marginBottom: 8,
+  },
+  connectionSubtitle: {
+    fontSize: 15,
+    color: "#64748B",
+    marginBottom: 40,
+  },
+  progressContainer: {
+    width: "100%",
+    marginBottom: 32,
+  },
+  progressBar: {
+    width: "100%",
+    height: 8,
+    backgroundColor: "#E2E8F0",
+    borderRadius: 4,
+    overflow: "hidden",
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 4,
+  },
+  progressPercent: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#64748B",
+    textAlign: "right",
+  },
+  stepContainer: {
+    height: 60,
+    justifyContent: "center",
+    marginBottom: 32,
+  },
+  stepContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F1F5F9",
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+  },
+  stepIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  stepLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1E293B",
+  },
+  timeline: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  timelineItem: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  timelineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  timelineLine: {
+    width: 24,
+    height: 2,
+    backgroundColor: "#E2E8F0",
+    marginHorizontal: 4,
+  },
+
+  // Connected Header (Switch Account)
+  connectedHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  connectedHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  connectedHeaderIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  connectedHeaderName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1E293B",
+    marginBottom: 2,
+  },
+  connectedHeaderStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  connectedDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#22C55E",
+    marginRight: 6,
+  },
+  connectedHeaderType: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  switchAccountBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F1F5F9",
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    gap: 6,
+  },
+  switchAccountText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#64748B",
+  },
 });
