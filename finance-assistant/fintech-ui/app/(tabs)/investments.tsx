@@ -36,14 +36,6 @@ type Holding = {
   sector?: string;
 };
 type Dividend = { id: string; symbol: string; date: string; amount: number };
-type DCAPlan = {
-  id: string;
-  symbol: string;
-  frequency: "weekly" | "biweekly" | "monthly";
-  amount: number;
-  last: string;
-  next: string;
-};
 type Point = { x: number | string; y: number };
 
 /* ================== Config ================== */
@@ -62,10 +54,6 @@ const MOCK_DIVIDENDS: Dividend[] = [
   { id: "d1", symbol: "AAPL", date: "2025-10-05", amount: 2.64 },
   { id: "d2", symbol: "VOO", date: "2025-10-15", amount: 9.3 },
   { id: "d3", symbol: "MSFT", date: "2025-10-20", amount: 3.1 },
-];
-const MOCK_DCA: DCAPlan[] = [
-  { id: "p1", symbol: "VOO", frequency: "monthly", amount: 200, last: "2025-09-15", next: "2025-10-15" },
-  { id: "p2", symbol: "AAPL", frequency: "biweekly", amount: 100, last: "2025-09-20", next: "2025-10-04" },
 ];
 
 /* ================== Utils ================== */
