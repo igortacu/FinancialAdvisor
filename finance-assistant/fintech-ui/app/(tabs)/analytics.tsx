@@ -11,9 +11,10 @@ import {
   TouchableWithoutFeedback,
   Platform,
   Dimensions,
-  UIManager, // Added UIManager import
+  UIManager,
   TextInput,
   Switch,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInUp } from "react-native-reanimated";
@@ -380,6 +381,12 @@ function MonthDropdown({
 // ---------- Screen ----------
 export default function Analytics() {
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+  
+  // Responsive chart width (accounting for padding)
+  const chartWidth = Math.min(screenWidth - 64, 450);
+  const singleMonthChartWidth = Math.min(screenWidth - 64, 350);
+  const forecastChartWidth = Math.min(screenWidth - 64, 350);
 
   const [loadingAgg] = React.useState(false);
   const [currency] = React.useState("USD");
@@ -715,7 +722,7 @@ export default function Analytics() {
                   <View style={s.trendsChartWrap}>
                     {selectedMonth === "All" ? (
                       <VictoryChart
-                        width={450}
+                        width={chartWidth}
                         height={300}
                         padding={{ left: 70, right: 30, top: 30, bottom: 50 }}
                         domainPadding={{ x: 40, y: [0, 50] }}
@@ -782,7 +789,7 @@ export default function Analytics() {
                       </VictoryChart>
                     ) : (
                       <VictoryChart
-                        width={350}
+                        width={singleMonthChartWidth}
                         height={300}
                         padding={{ left: 70, right: 30, top: 30, bottom: 50 }}
                         domainPadding={{ x: 80, y: [0, 50] }}
@@ -1037,7 +1044,7 @@ export default function Analytics() {
     {/* Chart with Income & Expense Events */}
     <View style={s.chartContainer}>
       <VictoryChart
-        width={350}
+        width={forecastChartWidth}
         height={250}
         padding={{ left: 60, right: 40, top: 30, bottom: 40 }}
         domain={{ 
