@@ -125,7 +125,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             } else if (accessToken) {
               // Decode JWT to get user info INSTANTLY (no network call)
               try {
-                const payload = JSON.parse(atob(accessToken.split('.')[1]));
+                // Helper to decode base64url with proper UTF-8 support
+                const decodeBase64Url = (str: string): string => {
+                  // Convert base64url to base64
+                  const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+                  // Pad with '=' if needed
+                  const padded = base64 + '='.repeat((4 - base64.length % 4) % 4);
+                  // Decode base64 to binary string
+                  const binary = atob(padded);
+                  // Convert binary string to UTF-8
+                  const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+                  return new TextDecoder('utf-8').decode(bytes);
+                };
+                
+                const payload = JSON.parse(decodeBase64Url(accessToken.split('.')[1]));
                 const userId = payload.sub;
                 const email = payload.email;
                 const userMeta = payload.user_metadata || {};
