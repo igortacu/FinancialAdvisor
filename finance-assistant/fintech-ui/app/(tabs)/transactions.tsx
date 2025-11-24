@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
+import { useLocalSearchParams } from "expo-router";
 
 import Card from "@/components/Card";
 import CompactChart from "@/components/CompactChart";
@@ -26,6 +27,7 @@ import { VictoryChart, VictoryLine, VictoryAxis, ChartsReady } from "@/lib/chart
 import { analyzeTransaction, getForecast } from "@/lib/mlApi";
 import { MOCK_RECEIPT, type ParsedReceipt } from "@/lib/receipt-mock";
 import { supabase } from "../../api";
+import { AnalyticsService } from "@/lib/analytics";
 // import { useAuth } from "@/store/auth"; // not used for userId now
 
 /** ========= DB bindings (edit to match table/columns) ========= */
@@ -129,6 +131,7 @@ function genFallbackForecast(n = 6) {
 /* ============== Component ============== */
 export default function Transactions() {
   const insets = useSafeAreaInsets();
+  const { category: initialCategory } = useLocalSearchParams<{ category: string }>();
   // const { user } = useAuth(); // avoid relying on store shape for id
   const [userId, setUserId] = React.useState<string | null>(null);
 
@@ -162,6 +165,13 @@ export default function Transactions() {
 
   // ---- filters
   const [activeCat, setActiveCat] = React.useState<Category | "ALL">("ALL");
+
+  React.useEffect(() => {
+    if (initialCategory && (CATEGORIES.includes(initialCategory as any) || initialCategory === "ALL")) {
+      setActiveCat(initialCategory as any);
+    }
+  }, [initialCategory]);
+
   const [month, setMonth] = React.useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -455,6 +465,14 @@ export default function Transactions() {
       }
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
+      AnalyticsService.track('AddTransaction', {
+        amount: Math.abs(total),
+        currency: parsed.currency || "MDL",
+        category: mlCat ?? guessCategory(merchant),
+        method: 'scan'
+      });
+
       if (ml?.advice?.length) {
         try {
           Alert.alert("AI Advice", ml.advice.join("\n"));
@@ -518,6 +536,14 @@ export default function Transactions() {
     }
 
     setList((p) => [mapDBToUI(data), ...p]);
+
+    AnalyticsService.track('AddTransaction', {
+      amount: Math.abs(total),
+      currency: "MDL",
+      category: mlCat ?? "General",
+      method: 'manual_demo'
+    });
+
     if (ml?.advice?.length) {
       try {
         Alert.alert("AI Advice", ml.advice.join("\n"));

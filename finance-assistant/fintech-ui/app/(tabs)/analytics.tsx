@@ -32,6 +32,8 @@ import {
   ChartsReady,
   VictoryLabel,
 } from "../../lib/charts";
+import { AnalyticsService } from "@/lib/analytics";
+import { useRouter } from "expo-router";
 
 // ---------- helpers ----------
 function formatMoney(val: number, currency: string) {
@@ -380,6 +382,14 @@ function MonthDropdown({
 // ---------- Screen ----------
 export default function Analytics() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+
+  // Determine effective current month based on device date; if absent in data, use last month in data
+  const monthsInData = React.useMemo(() => fallbackMonthly.map((m) => m.month), []);
+  const { abbr: sysMonthName, name: sysMonthLong } = getCurrentMonth();
+  const effectiveCurrentMonth = monthsInData.includes(sysMonthName)
+    ? sysMonthName
+    : monthsInData[monthsInData.length - 1];
 
   const [loadingAgg] = React.useState(false);
   const [currency] = React.useState("USD");
@@ -389,8 +399,21 @@ export default function Analytics() {
   const [spentWants] = React.useState(980);
   const [spentSavings] = React.useState(520);
 
+  // Connected Logic
+  const totalExpenses = spentNeeds + spentWants;
+  const totalIncome = 4100;
+
+  const connectedMonthlyData = React.useMemo(() => {
+    return fallbackMonthly.map((m) => {
+      if (m.month === effectiveCurrentMonth) {
+        return { ...m, needs: spentNeeds, wants: spentWants, savings: spentSavings };
+      }
+      return m;
+    });
+  }, [spentNeeds, spentWants, spentSavings, effectiveCurrentMonth]);
+
   // month selector
-  const [selectedMonth, setSelectedMonth] = React.useState<string>("All");
+  const [selectedMonth, setSelectedMonth] = React.useState<string>(effectiveCurrentMonth);
 
   // forecast period selector
   const [forecastPeriod, setForecastPeriod] = React.useState<"30" | "90">("30");
@@ -404,17 +427,10 @@ export default function Analytics() {
   const [budgets, setBudgets] = React.useState({ needs: 1600, wants: 900, savings: 600 });
   const [carryover, setCarryover] = React.useState(true);
 
-  // Determine effective current month based on device date; if absent in data, use last month in data
-  const monthsInData = React.useMemo(() => fallbackMonthly.map((m) => m.month), []);
-  const { abbr: sysMonthName, name: sysMonthLong } = getCurrentMonth();
-  const effectiveCurrentMonth = monthsInData.includes(sysMonthName)
-    ? sysMonthName
-    : monthsInData[monthsInData.length - 1];
-
   const filteredMonthlyData =
     selectedMonth === "All"
-      ? fallbackMonthly
-      : fallbackMonthly.filter((m) => m.month === selectedMonth);
+      ? connectedMonthlyData
+      : connectedMonthlyData.filter((m) => m.month === selectedMonth);
 
   // Whether the currently selected month is the editable current month
   const isCurrentMonthSelected =
@@ -423,13 +439,13 @@ export default function Analytics() {
   // Data for "All" view: replace current month's bars with editable budgets, keep others as actuals
   const monthlyDataWithCurrentBudget = React.useMemo(
     () =>
-      fallbackMonthly.map((m) => ({
+      connectedMonthlyData.map((m) => ({
         month: m.month,
         needs: m.month === effectiveCurrentMonth ? budgets.needs : m.needs,
         wants: m.month === effectiveCurrentMonth ? budgets.wants : m.wants,
         savings: m.month === effectiveCurrentMonth ? budgets.savings : m.savings,
       })),
-    [budgets, effectiveCurrentMonth]
+    [budgets, effectiveCurrentMonth, connectedMonthlyData]
   );
 
   const pieChartData = React.useMemo(() => {
@@ -457,7 +473,16 @@ export default function Analytics() {
   // Helpers for budget editing
   const setBudget = (key: "needs" | "wants" | "savings", v: string) => {
     const n = Math.max(0, Number(v.replace(/[^\d.]/g, "")) || 0);
-    setBudgets((b) => ({ ...b, [key]: n }));
+    setBudgets((b) => {
+      const newBudgets = { ...b, [key]: n };
+      // Track budget creation/update (debouncing would be better in production)
+      AnalyticsService.track('CreateBudget', {
+        category: key,
+        amount: n,
+        month: effectiveCurrentMonth
+      });
+      return newBudgets;
+    });
   };
 
     // Alerts for selected month (quick summary pills)
@@ -465,11 +490,11 @@ export default function Analytics() {
   // Map each month to its budget; use the current editable budgets for all months
   const budgetByMonth = React.useMemo(() => {
     const map: Record<string, { needs: number; wants: number; savings: number }> = {};
-    fallbackMonthly.forEach((m) => {
+    connectedMonthlyData.forEach((m) => {
       map[m.month] = { needs: budgets.needs, wants: budgets.wants, savings: budgets.savings };
     });
     return map;
-  }, [budgets]);
+  }, [budgets, connectedMonthlyData]);
   
     const selectedMonthBudgets =
       selectedMonth !== "All" ? budgetByMonth[selectedMonth] : undefined;
@@ -502,6 +527,21 @@ export default function Analytics() {
           .filter(Boolean)
       : [];
 
+  // Track budget limits
+  React.useEffect(() => {
+    if (monthAlerts && monthAlerts.length > 0) {
+      monthAlerts.forEach((alert) => {
+        if (alert && alert.type === "danger") {
+          AnalyticsService.track("HitBudgetLimit", {
+            category: alert.label,
+            month: selectedMonth,
+            details: alert.text,
+          });
+        }
+      });
+    }
+  }, [monthAlerts, selectedMonth]);
+
   return (
     <ScrollView
       style={[s.root, { paddingTop: insets.top + 6 }]}
@@ -513,8 +553,8 @@ export default function Analytics() {
         entering={FadeInUp.duration(380)}
         style={{ flexDirection: "row", gap: 12 }}
       >
-        <KPI label="Income (M)" value="$4,100" delta="+3.2%" />
-        <KPI label="Expenses (M)" value="$2,320" delta="-1.1%" />
+        <KPI label="Income (M)" value={formatMoney(totalIncome, currency)} delta="+3.2%" />
+        <KPI label="Expenses (M)" value={formatMoney(totalExpenses, currency)} delta="-1.1%" />
       </Animated.View>
 
       {!ChartsReady ? (
@@ -535,20 +575,39 @@ export default function Analytics() {
               <Text style={s.h1}>Category share</Text>
               <View style={{ alignItems: "center" }}>
                 <VictoryPie
-                  height={220}
-                  innerRadius={60}
+                  width={280}
+                  height={280}
+                  innerRadius={50}
+                  radius={70}
                   padAngle={2}
                   animate={{ duration: 900 }}
                   data={[
-                    { x: "Bills", y: 34 },
+                    { x: "Utilities", y: 34 },
                     { x: "Groceries", y: 26 },
                     { x: "Transport", y: 14 },
-                    { x: "Fun", y: 12 },
-                    { x: "Other", y: 14 },
+                    { x: "Shopping", y: 12 },
+                    { x: "General", y: 14 },
                   ]}
                   colorScale={["#246BFD", "#5b76f7", "#9db7ff", "#cfe3ff", "#e5edff"]}
                   labels={({ datum }: any) => `${datum.x}\n${datum.y}%`}
-                  style={{ labels: { fontSize: 12, fill: "#111827" } }}
+                  style={{ labels: { fontSize: 11, fill: "#374151", fontWeight: "600", padding: 14 } }}
+                  events={[{
+                    target: "data",
+                    eventHandlers: {
+                      onPressIn: () => {
+                        return [
+                          {
+                            target: "data",
+                            mutation: (props: any) => {
+                              const cat = props.datum.x;
+                              router.push({ pathname: "/transactions", params: { category: cat } });
+                              return null;
+                            }
+                          }
+                        ];
+                      }
+                    }
+                  }]}
                 />
               </View>
             </Card>
@@ -624,7 +683,7 @@ export default function Analytics() {
 
                 <MonthDropdown
                   value={selectedMonth}
-                  options={fallbackMonthly.map((m) => m.month)}
+                  options={connectedMonthlyData.map((m) => m.month)}
                   onChange={(m) => setSelectedMonth(m)}
                   buttonStyle={s.dropdownButton}
                   buttonTextStyle={s.dropdownButtonText}
@@ -1038,7 +1097,7 @@ export default function Analytics() {
     <View style={s.chartContainer}>
       <VictoryChart
         width={350}
-        height={250}
+        height={350}
         padding={{ left: 60, right: 40, top: 30, bottom: 40 }}
         domain={{ 
           x: [0, forecastPeriod === "30" ? 30 : 90],
@@ -1418,7 +1477,7 @@ const s = StyleSheet.create({
 
   // chart container used by forecast section
   chartContainer: {
-    height: 250,
+    height: 350,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FFFFFF",
