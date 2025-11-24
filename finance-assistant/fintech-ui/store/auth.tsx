@@ -122,34 +122,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (error) {
               console.error('❌ OAuth error:', error, errorDescription);
               window.history.replaceState(null, '', window.location.pathname);
-            } else if (accessToken && refreshToken) {
+            } else if (accessToken) {
+              // Decode JWT to get user info INSTANTLY (no network call)
               try {
-                // Set the session with the tokens - use short timeout
-                const sessionPromise = supabase.auth.setSession({
-                  access_token: accessToken,
-                  refresh_token: refreshToken,
+                const payload = JSON.parse(atob(accessToken.split('.')[1]));
+                const userId = payload.sub;
+                const email = payload.email;
+                const userMeta = payload.user_metadata || {};
+                
+                console.log('✅ OAuth user decoded:', email);
+                
+                // Set user immediately from JWT payload
+                setUser({
+                  id: userId,
+                  email: email,
+                  name: userMeta.full_name ?? userMeta.name ?? null,
+                  avatarUrl: userMeta.avatar_url ?? null,
                 });
+                setHasNetworkError(false);
+                setIsLoading(false);
+                window.history.replaceState(null, '', window.location.pathname);
                 
-                const { data, error: sessionError } = await Promise.race([
-                  sessionPromise,
-                  new Promise<never>((_, reject) => 
-                    setTimeout(() => reject(new Error('Session timeout')), 3000)
-                  )
-                ]);
-                
-                if (sessionError) {
-                  console.error('❌ Error setting session from OAuth:', sessionError);
-                } else if (data.session) {
-                  console.log('✅ OAuth session established:', data.session.user.email);
-                  // Set user immediately from metadata (skip slow profile fetch)
-                  await setUserFromSession(data.session.user, true);
-                  setHasNetworkError(false);
-                  setIsLoading(false);
-                  window.history.replaceState(null, '', window.location.pathname);
-                  return; // Exit early - OAuth complete
+                // Set session in background (don't wait)
+                if (refreshToken) {
+                  supabase.auth.setSession({
+                    access_token: accessToken,
+                    refresh_token: refreshToken,
+                  }).catch(err => console.warn('Background session set failed:', err));
                 }
-              } catch (err) {
-                console.error('❌ OAuth callback error:', err);
+                
+                return; // Exit early - OAuth complete
+              } catch (decodeErr) {
+                console.error('❌ Failed to decode JWT:', decodeErr);
               }
               window.history.replaceState(null, '', window.location.pathname);
             }
