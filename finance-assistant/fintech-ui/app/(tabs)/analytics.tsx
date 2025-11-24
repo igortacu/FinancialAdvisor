@@ -58,6 +58,18 @@ function getCurrentMonth() {
   return { index, abbr, name };
 }
 
+// ---------- Types for chart data ----------
+interface PieChartDatum {
+  x: string;
+  y: number;
+}
+
+interface IncomeExpenseEvent {
+  day: number;
+  amount: number;
+  label: string;
+}
+
 // ---------- mocked data ----------
 const fallbackMonthly = [
   { month: "Jan", needs: 1200, wants: 700, savings: 400 },
@@ -246,6 +258,8 @@ function BreakdownRow({
 }
 
 // ---------- Modal-based MonthDropdown (always above charts) ----------
+import type { StyleProp, ViewStyle, TextStyle } from "react-native";
+
 function MonthDropdown({
   value,
   options,
@@ -256,8 +270,8 @@ function MonthDropdown({
   value: string;
   options: string[];
   onChange: (v: string) => void;
-  buttonStyle: any;
-  buttonTextStyle: any;
+  buttonStyle: StyleProp<ViewStyle>;
+  buttonTextStyle: StyleProp<TextStyle>;
 }) {
   // View on native; HTMLElement on web
   const btnRef = React.useRef<View | null>(null);
@@ -563,7 +577,7 @@ export default function Analytics() {
                     { x: "Other", y: 14 },
                   ]}
                   colorScale={["#246BFD", "#5b76f7", "#9db7ff", "#cfe3ff", "#e5edff"]}
-                  labels={({ datum }: any) => `${datum.x}\n${datum.y}%`}
+                  labels={({ datum }: { datum: PieChartDatum }) => `${datum.x}\n${datum.y}%`}
                   style={{ labels: { fontSize: 12, fill: "#111827" } }}
                 />
               </View>
