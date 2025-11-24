@@ -26,6 +26,7 @@ import { VictoryChart, VictoryLine, VictoryAxis, ChartsReady } from "@/lib/chart
 import { analyzeTransaction, getForecast } from "@/lib/mlApi";
 import { MOCK_RECEIPT, type ParsedReceipt } from "@/lib/receipt-mock";
 import { supabase } from "../../api";
+import { AnalyticsService } from "@/lib/analytics";
 // import { useAuth } from "@/store/auth"; // not used for userId now
 
 /** ========= DB bindings (edit to match table/columns) ========= */
@@ -455,6 +456,14 @@ export default function Transactions() {
       }
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
+      AnalyticsService.track('AddTransaction', {
+        amount: Math.abs(total),
+        currency: parsed.currency || "MDL",
+        category: mlCat ?? guessCategory(merchant),
+        method: 'scan'
+      });
+
       if (ml?.advice?.length) {
         try {
           Alert.alert("AI Advice", ml.advice.join("\n"));
@@ -518,6 +527,14 @@ export default function Transactions() {
     }
 
     setList((p) => [mapDBToUI(data), ...p]);
+
+    AnalyticsService.track('AddTransaction', {
+      amount: Math.abs(total),
+      currency: "MDL",
+      category: mlCat ?? "General",
+      method: 'manual_demo'
+    });
+
     if (ml?.advice?.length) {
       try {
         Alert.alert("AI Advice", ml.advice.join("\n"));

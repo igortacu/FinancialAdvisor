@@ -32,6 +32,7 @@ import {
   ChartsReady,
   VictoryLabel,
 } from "../../lib/charts";
+import { AnalyticsService } from "@/lib/analytics";
 
 // ---------- helpers ----------
 function formatMoney(val: number, currency: string) {
@@ -457,7 +458,16 @@ export default function Analytics() {
   // Helpers for budget editing
   const setBudget = (key: "needs" | "wants" | "savings", v: string) => {
     const n = Math.max(0, Number(v.replace(/[^\d.]/g, "")) || 0);
-    setBudgets((b) => ({ ...b, [key]: n }));
+    setBudgets((b) => {
+      const newBudgets = { ...b, [key]: n };
+      // Track budget creation/update (debouncing would be better in production)
+      AnalyticsService.track('CreateBudget', {
+        category: key,
+        amount: n,
+        month: effectiveCurrentMonth
+      });
+      return newBudgets;
+    });
   };
 
     // Alerts for selected month (quick summary pills)
@@ -501,6 +511,21 @@ export default function Analytics() {
           })
           .filter(Boolean)
       : [];
+
+  // Track budget limits
+  React.useEffect(() => {
+    if (monthAlerts && monthAlerts.length > 0) {
+      monthAlerts.forEach((alert) => {
+        if (alert && alert.type === "danger") {
+          AnalyticsService.track("HitBudgetLimit", {
+            category: alert.label,
+            month: selectedMonth,
+            details: alert.text,
+          });
+        }
+      });
+    }
+  }, [monthAlerts, selectedMonth]);
 
   return (
     <ScrollView
