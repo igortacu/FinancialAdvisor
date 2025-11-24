@@ -69,10 +69,10 @@ const fallbackMonthly = [
   { month: "Jul", needs: 1500, wants: 700, savings: 500 },
   { month: "Aug", needs: 1800, wants: 1000, savings: 800 },
   { month: "Sep", needs: 1600, wants: 900, savings: 700 },
-  // Added remaining months so the current month can be selected and edited
-  { month: "Oct", needs: 0, wants: 0, savings: 0 },
-  { month: "Nov", needs: 0, wants: 0, savings: 0 },
-  { month: "Dec", needs: 0, wants: 0, savings: 0 },
+  // Q4 months with realistic projected/estimated values
+  { month: "Oct", needs: 1550, wants: 850, savings: 650 },
+  { month: "Nov", needs: 1700, wants: 950, savings: 600 },
+  { month: "Dec", needs: 1900, wants: 1200, savings: 500 },
 ];
 
 const fallbackCash7d = [
