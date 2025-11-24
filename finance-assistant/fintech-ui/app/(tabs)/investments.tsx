@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   RefreshControl,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInUp } from "react-native-reanimated";
@@ -97,8 +98,10 @@ function rollingVol(values: number[], window = 30): Point[] {
   return pts;
 }
 
-/* ================== Market Data (Yahoo Finance Direct) ================== */
-// Using Yahoo Finance v8 API directly - works on mobile/Expo without CORS issues
+/* ================== Market Data (Yahoo Finance via Proxy) ================== */
+// Uses Supabase Edge Function proxy to avoid CORS issues on web
+
+const USE_PROXY = Platform.OS === "web" || Boolean(SUPABASE_URL);
 
 type YahooQuoteResult = {
   symbol: string;
@@ -115,11 +118,49 @@ type QuoteData = {
   previousClose: number;
 };
 
+// Parse Yahoo Finance quote response
+function parseQuoteResponse(data: { quoteResponse?: { result?: YahooQuoteResult[] } }): Record<string, QuoteData> {
+  const quotes = data?.quoteResponse?.result ?? [];
+  const result: Record<string, QuoteData> = {};
+  
+  for (const q of quotes as YahooQuoteResult[]) {
+    if (q.symbol && typeof q.regularMarketPrice === "number") {
+      result[q.symbol] = {
+        price: q.regularMarketPrice,
+        change: q.regularMarketChange ?? 0,
+        changePercent: q.regularMarketChangePercent ?? 0,
+        previousClose: q.regularMarketPreviousClose ?? q.regularMarketPrice,
+      };
+    }
+  }
+  return result;
+}
+
+// Parse Yahoo Finance chart response
+function parseChartResponse(data: { chart?: { result?: Array<{ indicators?: { quote?: Array<{ close?: number[] }> } }> } }): number[] {
+  const chartData = data?.chart?.result?.[0];
+  if (!chartData) return [];
+  
+  const closes = chartData.indicators?.quote?.[0]?.close ?? [];
+  return closes.filter((v: unknown): v is number => 
+    typeof v === "number" && Number.isFinite(v) && v > 0
+  );
+}
+
 async function fetchYahooQuotes(symbols: string[]): Promise<Record<string, QuoteData>> {
   if (symbols.length === 0) return {};
   
   try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/quote?symbols=${symbols.join(",")}`;
+    let url: string;
+    
+    if (USE_PROXY && SUPABASE_URL) {
+      // Use Supabase Edge Function proxy (avoids CORS on web)
+      url = `${SUPABASE_URL}/functions/v1/yahoo-finance-proxy?action=quote&symbols=${symbols.join(",")}`;
+    } else {
+      // Direct API call (works on mobile)
+      url = `https://query1.finance.yahoo.com/v8/finance/quote?symbols=${symbols.join(",")}`;
+    }
+    
     const r = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0" },
     });
@@ -130,20 +171,22 @@ async function fetchYahooQuotes(symbols: string[]): Promise<Record<string, Quote
     }
     
     const data = await r.json();
-    const quotes = data?.quoteResponse?.result ?? [];
     
-    const result: Record<string, QuoteData> = {};
-    for (const q of quotes as YahooQuoteResult[]) {
-      if (q.symbol && typeof q.regularMarketPrice === "number") {
-        result[q.symbol] = {
-          price: q.regularMarketPrice,
-          change: q.regularMarketChange ?? 0,
-          changePercent: q.regularMarketChangePercent ?? 0,
-          previousClose: q.regularMarketPreviousClose ?? q.regularMarketPrice,
-        };
+    // Proxy returns { quotes: { AAPL: {...}, ... } }
+    // Direct API returns { quoteResponse: { result: [...] } }
+    if (data.quotes) {
+      // Proxy response format
+      const result: Record<string, QuoteData> = {};
+      for (const [symbol, info] of Object.entries(data.quotes)) {
+        const q = info as QuoteData;
+        if (q.price) {
+          result[symbol] = q;
+        }
       }
+      return result;
     }
-    return result;
+    
+    return parseQuoteResponse(data);
   } catch (e) {
     console.error("fetchYahooQuotes error:", e);
     return {};
@@ -152,7 +195,16 @@ async function fetchYahooQuotes(symbols: string[]): Promise<Record<string, Quote
 
 async function fetchYahooChart(symbol: string, range = "1y", interval = "1d"): Promise<number[]> {
   try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}`;
+    let url: string;
+    
+    if (USE_PROXY && SUPABASE_URL) {
+      // Use Supabase Edge Function proxy
+      url = `${SUPABASE_URL}/functions/v1/yahoo-finance-proxy?action=chart&symbols=${symbol}&range=${range}&interval=${interval}`;
+    } else {
+      // Direct API call
+      url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}`;
+    }
+    
     const r = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0" },
     });
@@ -163,14 +215,16 @@ async function fetchYahooChart(symbol: string, range = "1y", interval = "1d"): P
     }
     
     const data = await r.json();
-    const chartData = data?.chart?.result?.[0];
     
-    if (!chartData) return [];
+    // Proxy returns { prices: [...] }
+    // Direct API returns { chart: { result: [...] } }
+    if (Array.isArray(data.prices)) {
+      return data.prices.filter((v: unknown): v is number => 
+        typeof v === "number" && Number.isFinite(v) && v > 0
+      );
+    }
     
-    const closes = chartData.indicators?.quote?.[0]?.close ?? [];
-    return closes.filter((v: unknown): v is number => 
-      typeof v === "number" && Number.isFinite(v) && v > 0
-    );
+    return parseChartResponse(data);
   } catch (e) {
     console.error("fetchYahooChart error:", e);
     return [];
