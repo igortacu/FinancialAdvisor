@@ -181,8 +181,68 @@ export default function Investments(): React.ReactElement {
   const [err, setErr] = React.useState<string | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
 
-  const load = React.useCallback(async () => {
-    setLoading(true);
+  React.useEffect(() => {
+    let cancelled = false;
+
+    const loadData = async () => {
+      setLoading(true);
+      setErr(null);
+      try {
+        const { data, error } = await supabase
+          .from("investments")
+          .select("*")
+          .order("id", { ascending: false });
+
+        if (cancelled) return;
+
+        let rows: Holding[] = MOCK_HOLDINGS;
+        if (!error && Array.isArray(data) && data.length > 0) {
+          rows = data.map((r: SupabaseInvestmentRow, idx: number) => ({
+            id: r.id ?? idx,
+            symbol: String(r.symbol ?? r.ticker ?? `TICK${idx}`),
+            name: r.name ?? r.symbol ?? undefined,
+            quantity: Number(r.quantity ?? 0),
+            avg_price: Number(r.avg_price ?? r.price ?? 0),
+            current_price: Number(r.avg_price ?? r.price ?? 0),
+            sector: r.sector ?? undefined,
+          }));
+        }
+
+        const symbols = rows.filter((h) => h.symbol !== "CASH").map((h) => h.symbol);
+        const quotes = await fetchQuotes(symbols);
+
+        if (cancelled) return;
+
+        const merged = rows.map((h) =>
+          h.symbol === "CASH" ? h : { ...h, current_price: quotes[h.symbol] ?? h.current_price }
+        );
+        setHoldings(merged);
+
+        const s = await fetchCandles("SPY");
+
+        if (cancelled) return;
+
+        setSpy(s.length ? s : await fetchCandlesFallback("SPY"));
+      } catch (e: unknown) {
+        if (cancelled) return;
+        const msg = e instanceof Error ? e.message : "Load failed";
+        setErr(msg);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
     setErr(null);
     try {
       const { data, error } = await supabase
@@ -216,19 +276,9 @@ export default function Investments(): React.ReactElement {
       const msg = e instanceof Error ? e.message : "Load failed";
       setErr(msg);
     } finally {
-      setLoading(false);
+      setRefreshing(false);
     }
   }, []);
-
-  React.useEffect(() => {
-    load();
-  }, [load]);
-
-  const onRefresh = React.useCallback(async () => {
-    setRefreshing(true);
-    await load();
-    setRefreshing(false);
-  }, [load]);
 
   /* ===== Derived metrics ===== */
   const derived = React.useMemo(() => {
@@ -578,7 +628,7 @@ export default function Investments(): React.ReactElement {
           ) : err ? (
             <>
               <Text style={{ color: "#ef4444", marginTop: 8 }}>{err}</Text>
-              <TouchableOpacity style={s.retry} onPress={load}>
+              <TouchableOpacity style={s.retry} onPress={onRefresh}>
                 <Text style={s.retryText}>Retry</Text>
               </TouchableOpacity>
             </>
