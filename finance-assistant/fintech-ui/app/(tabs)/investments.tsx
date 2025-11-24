@@ -106,8 +106,12 @@ function rollingVol(values: number[], window = 30): Point[] {
 }
 
 /* ================== Market-data proxy ================== */
-/* ================== Market-data proxy ================== */
+const isProxyConfigured = Boolean(SUPABASE_URL);
+
 function proxy(params: Record<string, string>) {
+  if (!isProxyConfigured) {
+    return Promise.reject(new Error("SUPABASE_URL not configured - using mock data"));
+  }
   const base = `${SUPABASE_URL}/functions/v1/finnhub-proxy`;
   const qs = new URLSearchParams(params).toString();
   const url = `${base}?${qs}`;
@@ -115,8 +119,16 @@ function proxy(params: Record<string, string>) {
 }
 
 async function fetchQuote(symbol: string): Promise<number | null> {
+  if (!isProxyConfigured) {
+    // Return null to use fallback prices from MOCK_HOLDINGS
+    return null;
+  }
   try {
     const r = await proxy({ source: "finnhub", path: "quote", qs: `symbol=${encodeURIComponent(symbol)}` });
+    if (r.status === 401) {
+      console.warn(`fetchQuote: 401 Unauthorized for ${symbol} - API key may be invalid or expired`);
+      return null;
+    }
     if (!r.ok) throw new Error(`Quote ${r.status}`);
     const j = await r.json();
     const price = Number(j?.c);
@@ -128,6 +140,10 @@ async function fetchQuote(symbol: string): Promise<number | null> {
 }
 
 async function fetchQuotes(symbols: string[]): Promise<Record<string, number>> {
+  if (!isProxyConfigured) {
+    // Return empty to use MOCK_HOLDINGS prices
+    return {};
+  }
   const out: Record<string, number> = {};
   for (const s of symbols) {
     const p = await fetchQuote(s);
@@ -138,11 +154,18 @@ async function fetchQuotes(symbols: string[]): Promise<Record<string, number>> {
 }
 
 async function fetchCandles(symbol = "SPY"): Promise<number[]> {
+  if (!isProxyConfigured) {
+    return [];
+  }
   try {
     const to = Math.floor(Date.now() / 1000) - 60;
     const from = to - 220 * 86400;
     const qs = `symbol=${encodeURIComponent(symbol)}&resolution=D&from=${from}&to=${to}`;
     const r = await proxy({ source: "finnhub", path: "stock/candle", qs });
+    if (r.status === 401) {
+      console.warn(`fetchCandles: 401 Unauthorized for ${symbol} - API key may be invalid or expired`);
+      return [];
+    }
     if (!r.ok) throw new Error(`Candle ${r.status}`);
     const j = await r.json();
     if (j?.s !== "ok" || !Array.isArray(j?.c)) return [];
@@ -155,10 +178,17 @@ async function fetchCandles(symbol = "SPY"): Promise<number[]> {
 
 // Fallback via server (no browser CORS)
 async function fetchCandlesFallback(symbol = "SPY"): Promise<number[]> {
+  if (!isProxyConfigured) {
+    return [];
+  }
   try {
     const codeMap: Record<string, string> = { SPY: "spy.us" };
     const code = codeMap[symbol] ?? `${symbol.toLowerCase()}.us`;
     const r = await proxy({ source: "stooq", code });
+    if (r.status === 401) {
+      console.warn(`fetchCandlesFallback: 401 Unauthorized for ${symbol}`);
+      return [];
+    }
     if (!r.ok) throw new Error(`Stooq ${r.status}`);
     const csv = await r.text();
     const lines = csv.trim().split("\n").slice(1);
