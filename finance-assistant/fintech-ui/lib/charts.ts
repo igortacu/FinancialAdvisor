@@ -23,5 +23,7 @@ export const VictoryContainer = V.VictoryContainer ?? (() => null);
 export const VictoryStack = V.VictoryStack ?? (() => null);
 export const VictoryScatter = V.VictoryScatter ?? (() => null);
 export const VictoryLabel = V.VictoryLabel ?? (() => null);
+export const VictoryLegend = V.VictoryLegend ?? (() => null);
+export const VictoryTooltip = V.VictoryTooltip ?? (() => null);
 export const ChartsReady =
   !!V.VictoryChart && !!V.VictoryPie && !!V.VictoryAxis;
