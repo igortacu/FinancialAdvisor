@@ -105,52 +105,50 @@ function rollingVol(values: number[], window = 30): Point[] {
   return pts;
 }
 
-/* ================== Market-data proxy ================== */
+/* ================== Market-data proxy (Yahoo Finance) ================== */
 const isProxyConfigured = Boolean(SUPABASE_URL);
 
-function proxy(params: Record<string, string>) {
+function yahooProxy(params: Record<string, string>) {
   if (!isProxyConfigured) {
     return Promise.reject(new Error("SUPABASE_URL not configured - using mock data"));
   }
-  const base = `${SUPABASE_URL}/functions/v1/finnhub-proxy`;
+  const base = `${SUPABASE_URL}/functions/v1/yahoo-finance-proxy`;
   const qs = new URLSearchParams(params).toString();
   const url = `${base}?${qs}`;
   return fetch(url, { cache: "no-store", referrerPolicy: "no-referrer" });
 }
 
-async function fetchQuote(symbol: string): Promise<number | null> {
-  if (!isProxyConfigured) {
-    // Return null to use fallback prices from MOCK_HOLDINGS
-    return null;
-  }
-  try {
-    const r = await proxy({ source: "finnhub", path: "quote", qs: `symbol=${encodeURIComponent(symbol)}` });
-    if (r.status === 401) {
-      console.warn(`fetchQuote: 401 Unauthorized for ${symbol} - API key may be invalid or expired`);
-      return null;
-    }
-    if (!r.ok) throw new Error(`Quote ${r.status}`);
-    const j = await r.json();
-    const price = Number(j?.c);
-    return Number.isFinite(price) && price > 0 ? price : null;
-  } catch (e) {
-    console.error("fetchQuote error", e);
-    return null;
-  }
-}
-
 async function fetchQuotes(symbols: string[]): Promise<Record<string, number>> {
-  if (!isProxyConfigured) {
-    // Return empty to use MOCK_HOLDINGS prices
+  if (!isProxyConfigured || symbols.length === 0) {
     return {};
   }
-  const out: Record<string, number> = {};
-  for (const s of symbols) {
-    const p = await fetchQuote(s);
-    if (p != null) out[s] = p;
-    await new Promise((res) => setTimeout(res, 120)); // throttle a bit
+  try {
+    const r = await yahooProxy({ 
+      action: "quote", 
+      symbols: symbols.join(",") 
+    });
+    
+    if (!r.ok) {
+      console.warn(`fetchQuotes: ${r.status} error`);
+      return {};
+    }
+    
+    const data = await r.json();
+    const quotes = data?.quotes ?? {};
+    
+    // Extract just the prices
+    const result: Record<string, number> = {};
+    for (const [symbol, info] of Object.entries(quotes)) {
+      const quote = info as { price: number };
+      if (typeof quote?.price === "number" && quote.price > 0) {
+        result[symbol] = quote.price;
+      }
+    }
+    return result;
+  } catch (e) {
+    console.error("fetchQuotes error", e);
+    return {};
   }
-  return out;
 }
 
 async function fetchCandles(symbol = "SPY"): Promise<number[]> {
@@ -158,44 +156,30 @@ async function fetchCandles(symbol = "SPY"): Promise<number[]> {
     return [];
   }
   try {
-    const to = Math.floor(Date.now() / 1000) - 60;
-    const from = to - 220 * 86400;
-    const qs = `symbol=${encodeURIComponent(symbol)}&resolution=D&from=${from}&to=${to}`;
-    const r = await proxy({ source: "finnhub", path: "stock/candle", qs });
-    if (r.status === 401) {
-      console.warn(`fetchCandles: 401 Unauthorized for ${symbol} - API key may be invalid or expired`);
+    const r = await yahooProxy({ 
+      action: "chart", 
+      symbols: symbol,
+      range: "1y",
+      interval: "1d"
+    });
+    
+    if (!r.ok) {
+      console.warn(`fetchCandles: ${r.status} error for ${symbol}`);
       return [];
     }
-    if (!r.ok) throw new Error(`Candle ${r.status}`);
-    const j = await r.json();
-    if (j?.s !== "ok" || !Array.isArray(j?.c)) return [];
-    return j.c.map((v: unknown) => Number(v)).filter(Number.isFinite);
+    
+    const data = await r.json();
+    const prices = data?.prices ?? [];
+    
+    if (!Array.isArray(prices) || prices.length === 0) {
+      return [];
+    }
+    
+    return prices.filter((v: unknown): v is number => 
+      typeof v === "number" && Number.isFinite(v) && v > 0
+    );
   } catch (e) {
     console.error("fetchCandles error", e);
-    return [];
-  }
-}
-
-// Fallback via server (no browser CORS)
-async function fetchCandlesFallback(symbol = "SPY"): Promise<number[]> {
-  if (!isProxyConfigured) {
-    return [];
-  }
-  try {
-    const codeMap: Record<string, string> = { SPY: "spy.us" };
-    const code = codeMap[symbol] ?? `${symbol.toLowerCase()}.us`;
-    const r = await proxy({ source: "stooq", code });
-    if (r.status === 401) {
-      console.warn(`fetchCandlesFallback: 401 Unauthorized for ${symbol}`);
-      return [];
-    }
-    if (!r.ok) throw new Error(`Stooq ${r.status}`);
-    const csv = await r.text();
-    const lines = csv.trim().split("\n").slice(1);
-    const closes = lines.map((l) => Number(l.split(",")[4])).filter(Number.isFinite);
-    return closes.slice(-220);
-  } catch (e) {
-    console.error("fetchCandlesFallback error", e);
     return [];
   }
 }
@@ -252,7 +236,7 @@ export default function Investments(): React.ReactElement {
 
         if (cancelled) return;
 
-        setSpy(s.length ? s : await fetchCandlesFallback("SPY"));
+        setSpy(s);
       } catch (e: unknown) {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : "Load failed";
@@ -301,7 +285,7 @@ export default function Investments(): React.ReactElement {
       setHoldings(merged);
 
       const s = await fetchCandles("SPY");
-      setSpy(s.length ? s : await fetchCandlesFallback("SPY"));
+      setSpy(s);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Load failed";
       setErr(msg);
