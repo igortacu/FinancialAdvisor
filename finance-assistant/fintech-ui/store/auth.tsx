@@ -36,10 +36,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(!devMode); // Not loading if dev mode
   const [hasNetworkError, setHasNetworkError] = useState(false);
 
-  // Helper function to set user from session
-  const setUserFromSession = useCallback(async (authUser: any) => {
+  // Helper function to set user from session (with optional profile fetch)
+  const setUserFromSession = useCallback(async (authUser: any, skipProfileFetch = false) => {
     if (!authUser) {
       setUser(null);
+      return;
+    }
+    
+    // For OAuth/fast login, skip profile fetch and use metadata
+    if (skipProfileFetch) {
+      setUser({
+        id: authUser.id,
+        email: authUser.email,
+        name: authUser.user_metadata?.full_name ?? authUser.user_metadata?.name ?? null,
+        avatarUrl: authUser.user_metadata?.avatar_url ?? null,
+      });
       return;
     }
     
@@ -54,15 +65,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser({
         id: authUser.id,
         email: authUser.email,
-        name: profile?.name ?? authUser.user_metadata?.name ?? null,
+        name: profile?.name ?? authUser.user_metadata?.full_name ?? authUser.user_metadata?.name ?? null,
         avatarUrl: authUser.user_metadata?.avatar_url ?? null,
       });
     } catch (profileError) {
-      console.log('⚠️ Profile fetch failed, using auth metadata:', profileError);
+      console.log('⚠️ Profile fetch failed, using auth metadata');
       setUser({
         id: authUser.id,
         email: authUser.email,
-        name: authUser.user_metadata?.name ?? null,
+        name: authUser.user_metadata?.full_name ?? authUser.user_metadata?.name ?? null,
         avatarUrl: authUser.user_metadata?.avatar_url ?? null,
       });
     }
@@ -110,41 +121,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             
             if (error) {
               console.error('❌ OAuth error:', error, errorDescription);
-              // Clear the hash from URL
               window.history.replaceState(null, '', window.location.pathname);
             } else if (accessToken && refreshToken) {
               try {
-                // Set the session with the tokens
-                const { data, error: sessionError } = await supabase.auth.setSession({
+                // Set the session with the tokens - use short timeout
+                const sessionPromise = supabase.auth.setSession({
                   access_token: accessToken,
                   refresh_token: refreshToken,
                 });
                 
+                const { data, error: sessionError } = await Promise.race([
+                  sessionPromise,
+                  new Promise<never>((_, reject) => 
+                    setTimeout(() => reject(new Error('Session timeout')), 3000)
+                  )
+                ]);
+                
                 if (sessionError) {
                   console.error('❌ Error setting session from OAuth:', sessionError);
                 } else if (data.session) {
-                  console.log('✅ Web OAuth session established:', data.session.user.email);
-                  // Set user directly from the session
-                  await setUserFromSession(data.session.user);
+                  console.log('✅ OAuth session established:', data.session.user.email);
+                  // Set user immediately from metadata (skip slow profile fetch)
+                  await setUserFromSession(data.session.user, true);
                   setHasNetworkError(false);
                   setIsLoading(false);
-                  // Clear the hash from URL
                   window.history.replaceState(null, '', window.location.pathname);
-                  return; // Exit early - we've handled the OAuth callback
+                  return; // Exit early - OAuth complete
                 }
               } catch (err) {
-                console.error('❌ Error processing OAuth callback:', err);
+                console.error('❌ OAuth callback error:', err);
               }
-              // Clear the hash from URL
               window.history.replaceState(null, '', window.location.pathname);
             }
           }
         }
         
-        // Use getSession instead of getUser - it's faster and works better with OAuth
-        // Increase timeout to 8 seconds for slower networks
+        // Use getSession - faster than getUser
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Network timeout - please check your connection')), 8000)
+          setTimeout(() => reject(new Error('Network timeout')), 4000)
         );
         
         const authPromise = supabase.auth.getSession();
