@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
+import { useLocalSearchParams } from "expo-router";
 
 import Card from "@/components/Card";
 import CompactChart from "@/components/CompactChart";
@@ -130,6 +131,7 @@ function genFallbackForecast(n = 6) {
 /* ============== Component ============== */
 export default function Transactions() {
   const insets = useSafeAreaInsets();
+  const { category: initialCategory } = useLocalSearchParams<{ category: string }>();
   // const { user } = useAuth(); // avoid relying on store shape for id
   const [userId, setUserId] = React.useState<string | null>(null);
 
@@ -163,6 +165,13 @@ export default function Transactions() {
 
   // ---- filters
   const [activeCat, setActiveCat] = React.useState<Category | "ALL">("ALL");
+
+  React.useEffect(() => {
+    if (initialCategory && (CATEGORIES.includes(initialCategory as any) || initialCategory === "ALL")) {
+      setActiveCat(initialCategory as any);
+    }
+  }, [initialCategory]);
+
   const [month, setMonth] = React.useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
