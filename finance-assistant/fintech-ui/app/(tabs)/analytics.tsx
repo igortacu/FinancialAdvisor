@@ -382,6 +382,13 @@ function MonthDropdown({
 export default function Analytics() {
   const insets = useSafeAreaInsets();
 
+  // Determine effective current month based on device date; if absent in data, use last month in data
+  const monthsInData = React.useMemo(() => fallbackMonthly.map((m) => m.month), []);
+  const { abbr: sysMonthName, name: sysMonthLong } = getCurrentMonth();
+  const effectiveCurrentMonth = monthsInData.includes(sysMonthName)
+    ? sysMonthName
+    : monthsInData[monthsInData.length - 1];
+
   const [loadingAgg] = React.useState(false);
   const [currency] = React.useState("USD");
 
@@ -391,7 +398,7 @@ export default function Analytics() {
   const [spentSavings] = React.useState(520);
 
   // month selector
-  const [selectedMonth, setSelectedMonth] = React.useState<string>("All");
+  const [selectedMonth, setSelectedMonth] = React.useState<string>(effectiveCurrentMonth);
 
   // forecast period selector
   const [forecastPeriod, setForecastPeriod] = React.useState<"30" | "90">("30");
@@ -404,13 +411,6 @@ export default function Analytics() {
   // Budgets and carryover
   const [budgets, setBudgets] = React.useState({ needs: 1600, wants: 900, savings: 600 });
   const [carryover, setCarryover] = React.useState(true);
-
-  // Determine effective current month based on device date; if absent in data, use last month in data
-  const monthsInData = React.useMemo(() => fallbackMonthly.map((m) => m.month), []);
-  const { abbr: sysMonthName, name: sysMonthLong } = getCurrentMonth();
-  const effectiveCurrentMonth = monthsInData.includes(sysMonthName)
-    ? sysMonthName
-    : monthsInData[monthsInData.length - 1];
 
   const filteredMonthlyData =
     selectedMonth === "All"
