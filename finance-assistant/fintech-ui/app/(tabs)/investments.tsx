@@ -37,6 +37,19 @@ type Holding = {
 };
 type Dividend = { id: string; symbol: string; date: string; amount: number };
 type Point = { x: number | string; y: number };
+type SparkPosition = { id: string | number; name: string; change: number; data: number[] };
+type PieChartDatum = { x: string; y: number };
+type BarChartDatum = { x: string; y: number };
+type SupabaseInvestmentRow = {
+  id?: number;
+  symbol?: string;
+  ticker?: string;
+  name?: string;
+  quantity?: number;
+  avg_price?: number;
+  price?: number;
+  sector?: string;
+};
 
 /* ================== Config ================== */
 // Public values only. Server secret stays in Edge Function.
@@ -179,7 +192,7 @@ export default function Investments(): React.ReactElement {
 
       let rows: Holding[] = MOCK_HOLDINGS;
       if (!error && Array.isArray(data) && data.length > 0) {
-        rows = data.map((r: any, idx: number) => ({
+        rows = data.map((r: SupabaseInvestmentRow, idx: number) => ({
           id: r.id ?? idx,
           symbol: String(r.symbol ?? r.ticker ?? `TICK${idx}`),
           name: r.name ?? r.symbol ?? undefined,
@@ -199,8 +212,8 @@ export default function Investments(): React.ReactElement {
 
       const s = await fetchCandles("SPY");
       setSpy(s.length ? s : await fetchCandlesFallback("SPY"));
-    } catch (e: any) {
-      const msg = String(e?.message ?? "Load failed");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Load failed";
       setErr(msg);
     } finally {
       setLoading(false);
@@ -351,7 +364,7 @@ export default function Investments(): React.ReactElement {
                   animate={{ duration: 800 }}
                   data={derived.allocPie.length ? derived.allocPie : [{ x: "Unclassified", y: 100 }]}
                   colorScale={["#246BFD", "#5b76f7", "#9db7ff", "#111827", "#a78bfa", "#f59e0b", "#10b981"]}
-                  labels={({ datum }: any) => `${datum.x}\n${nf.format(datum.y)}%`}
+                  labels={({ datum }: { datum: PieChartDatum }) => `${datum.x}\n${nf.format(datum.y)}%`}
                   style={{ labels: { fontSize: 10, fill: "#111827" } }}
                 />
               )}
@@ -415,7 +428,7 @@ export default function Investments(): React.ReactElement {
                   <VictoryBar
                     data={derived.pnlBars.length ? derived.pnlBars : [{ x: "N/A", y: 0 }]}
                     style={{
-                      data: ({ datum }: any) => ({ fill: datum.y >= 0 ? "#16a34a" : "#ef4444" }),
+                      data: ({ datum }: { datum: BarChartDatum }) => ({ fill: datum.y >= 0 ? "#16a34a" : "#ef4444" }),
                     }}
                     barRatio={0.6}
                   />
@@ -515,7 +528,7 @@ export default function Investments(): React.ReactElement {
           <Card>
             <Text style={s.h1}>Positions (sparklines)</Text>
             <View style={{ marginTop: 8, gap: 10 }}>
-              {mockSparks.map((p: any) => (
+              {(mockSparks as SparkPosition[]).map((p) => (
                 <View key={p.id} style={s.row}>
                   <View style={{ flex: 1 }}>
                     <Text style={s.symbol}>{p.name}</Text>
