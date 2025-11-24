@@ -54,7 +54,6 @@ export default function AuthScreen(): React.ReactElement {
   }, [screen]);
 
   // If user is already logged in, redirect to tabs
-
   useEffect(() => {
     if (!authLoading && user) {
       (async () => {

@@ -21,12 +21,27 @@ const AuthCtx = createContext<Ctx>({
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // DEV MODE: Initialize with mock user immediately if dev mode is enabled
+  const devMode = process.env.EXPO_PUBLIC_DEV_MODE === 'true';
+  const [user, setUser] = useState<AuthUser | null>(
+    devMode ? {
+      id: 'dev-user-123',
+      email: 'dev@example.com',
+      name: 'Dev User',
+      avatarUrl: null,
+    } : null
+  );
+  const [isLoading, setIsLoading] = useState(!devMode); // Not loading if dev mode
   const [hasNetworkError, setHasNetworkError] = useState(false);
 
   useEffect(() => {
     const init = async () => {
+      // DEV MODE: Skip auth entirely if EXPO_PUBLIC_DEV_MODE is set
+      if (devMode) {
+        console.log('🟡 DEV MODE: Bypassing authentication with mock user');
+        return; // User already set in initial state
+      }
+
       try {
         console.log('🔵 Starting auth initialization...');
         
@@ -88,6 +103,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
     init();
 
+    // Skip Supabase auth subscription in dev mode
+    if (devMode) {
+      console.log('🟡 DEV MODE: Skipping Supabase auth subscription');
+      return () => {}; // No cleanup needed
+    }
+
     const { data: sub } = supabase.auth.onAuthStateChange(async (_ev, session) => {
       const u = session?.user;
       if (u) {
@@ -105,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
     return () => sub.subscription.unsubscribe();
-  }, []);
+  }, [devMode]);
 
   return <AuthCtx.Provider value={{ user, setUser, isLoading }}>{children}</AuthCtx.Provider>;
 }

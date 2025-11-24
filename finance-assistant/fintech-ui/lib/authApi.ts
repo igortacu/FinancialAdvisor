@@ -3,6 +3,12 @@ import { supabase } from "@/api";
 import { getRedirectTo } from "./authRedirect";
 
 export async function signInWithGoogle() {
+  // In dev mode, skip OAuth and show alert
+  if (process.env.EXPO_PUBLIC_DEV_MODE === 'true') {
+    Alert.alert("Dev Mode", "OAuth is disabled in development mode. The app is using a mock user.");
+    return;
+  }
+  
   const redirectTo = getRedirectTo();
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",

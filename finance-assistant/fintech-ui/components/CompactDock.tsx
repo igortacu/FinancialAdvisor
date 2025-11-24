@@ -21,10 +21,7 @@ export default function CompactDock({
   const centerIndex = 2; // reserve slot for FAB
 
   return (
-    <View
-      pointerEvents="box-none"
-      style={[s.wrap, { paddingBottom: insets.bottom || 10 }]}
-    >
+    <View style={[s.wrap, { paddingBottom: insets.bottom || 10 }]}>
       <View style={s.bar}>
         {state.routes.map((route, i) => {
           if (i === centerIndex) {
@@ -36,6 +33,7 @@ export default function CompactDock({
             const event = navigation.emit({
               type: "tabPress",
               target: route.key,
+              canPreventDefault: true,
             });
             if (!isFocused && !event.defaultPrevented)
               navigation.navigate(route.name);
@@ -68,6 +66,7 @@ const s = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 10,
+    pointerEvents: "box-none",
   },
   bar: {
     alignSelf: "center",
@@ -84,6 +83,7 @@ const s = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
+    pointerEvents: "auto",
   },
   tab: { width: 28, alignItems: "center" },
 });

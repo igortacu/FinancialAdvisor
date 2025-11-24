@@ -32,7 +32,7 @@ export default function TabLayout() {
   }
 
   return (
-    <>
+    <View style={{ flex: 1 }}>
       <Tabs
         screenOptions={{ headerShown: false }}
         tabBar={(props) => <CompactDock {...props} />} // ⬅️ custom dock
@@ -46,6 +46,6 @@ export default function TabLayout() {
 
       {/* floating action button over the dock */}
       <ScanFab />
-    </>
+    </View>
   );
 }

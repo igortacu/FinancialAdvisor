@@ -13,7 +13,7 @@ export default function Index() {
   const missing = requiredEnvVars.filter((k) => !process.env[k]);
 
   if (missing.length === 0) {
-    return <Redirect href="/home" />;
+    return <Redirect href="/(tabs)" />;
   }
 
   // Friendly setup screen instead of throwing (prevents blank page)

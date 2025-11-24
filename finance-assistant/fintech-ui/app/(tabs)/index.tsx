@@ -469,6 +469,7 @@ export default function Dashboard() {
   const y = React.useRef(new RNAnimated.Value(0)).current;
   const [menuVisible, setMenuVisible] = React.useState(false);
   const [txModalVisible, setTxModalVisible] = React.useState(false);
+  const [avatarError, setAvatarError] = React.useState(false);
   const { tx } = useTxHistory();
 
   // Range toggle: 7 days vs 12 months
@@ -595,11 +596,14 @@ export default function Dashboard() {
         >
           <View style={styles.pillHeader}>
             <View style={styles.avatarWrap}>
-              {user?.avatarUrl ? (
+              {user?.avatarUrl && !avatarError ? (
                 <Image 
                   source={{ uri: user.avatarUrl }} 
                   style={styles.avatarImg}
-                  onError={() => console.log('Avatar failed to load')}
+                  onError={() => {
+                    console.log('Avatar failed to load, showing initials');
+                    setAvatarError(true);
+                  }}
                 />
               ) : (
                 <View style={[styles.avatarImg, styles.avatarPlaceholder]}>
