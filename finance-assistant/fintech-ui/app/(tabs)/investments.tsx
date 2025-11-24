@@ -22,8 +22,6 @@ import {
   VictoryArea,
   ChartsReady,
 } from "@/lib/charts";
-import { supabase } from "../../api";
-import { positions as mockSparks } from "@/constants/mock";
 
 /* ================== Types ================== */
 type Holding = {
@@ -37,36 +35,30 @@ type Holding = {
 };
 type Dividend = { id: string; symbol: string; date: string; amount: number };
 type Point = { x: number | string; y: number };
-type SparkPosition = { id: string | number; name: string; change: number; data: number[] };
 type PieChartDatum = { x: string; y: number };
 type BarChartDatum = { x: string; y: number };
-type SupabaseInvestmentRow = {
-  id?: number;
-  symbol?: string;
-  ticker?: string;
-  name?: string;
-  quantity?: number;
-  avg_price?: number;
-  price?: number;
-  sector?: string;
-};
 
 /* ================== Config ================== */
 // Public values only. Server secret stays in Edge Function.
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
 
-/* ================== Mock data ================== */
+/* ================== Mock Portfolio ================== */
+// Your simulated portfolio - these are your "purchased" positions
+// The app will fetch real-time prices to update current_price
 const MOCK_HOLDINGS: Holding[] = [
-  { id: 1, symbol: "AAPL", name: "Apple", quantity: 12, avg_price: 165, current_price: 165, sector: "Tech" },
-  { id: 2, symbol: "MSFT", name: "Microsoft", quantity: 8, avg_price: 320, current_price: 320, sector: "Tech" },
-  { id: 3, symbol: "VOO", name: "Vanguard S&P 500", quantity: 5, avg_price: 433, current_price: 433, sector: "ETF" },
-  { id: 4, symbol: "TSLA", name: "Tesla", quantity: 6, avg_price: 195, current_price: 195, sector: "Auto" },
-  { id: 5, symbol: "CASH", name: "Cash", quantity: 1, avg_price: 1, current_price: 1, sector: "Cash" },
+  { id: 1, symbol: "AAPL", name: "Apple Inc.", quantity: 12, avg_price: 178.50, current_price: 178.50, sector: "Tech" },
+  { id: 2, symbol: "MSFT", name: "Microsoft Corp.", quantity: 8, avg_price: 378.25, current_price: 378.25, sector: "Tech" },
+  { id: 3, symbol: "VOO", name: "Vanguard S&P 500 ETF", quantity: 5, avg_price: 485.00, current_price: 485.00, sector: "ETF" },
+  { id: 4, symbol: "TSLA", name: "Tesla Inc.", quantity: 6, avg_price: 242.80, current_price: 242.80, sector: "Auto" },
+  { id: 5, symbol: "NVDA", name: "NVIDIA Corp.", quantity: 4, avg_price: 875.00, current_price: 875.00, sector: "Tech" },
+  { id: 6, symbol: "GOOGL", name: "Alphabet Inc.", quantity: 3, avg_price: 165.40, current_price: 165.40, sector: "Tech" },
+  { id: 7, symbol: "CASH", name: "Cash Reserve", quantity: 2500, avg_price: 1, current_price: 1, sector: "Cash" },
 ];
+
 const MOCK_DIVIDENDS: Dividend[] = [
-  { id: "d1", symbol: "AAPL", date: "2025-10-05", amount: 2.64 },
-  { id: "d2", symbol: "VOO", date: "2025-10-15", amount: 9.3 },
-  { id: "d3", symbol: "MSFT", date: "2025-10-20", amount: 3.1 },
+  { id: "d1", symbol: "AAPL", date: "2025-12-05", amount: 2.88 },
+  { id: "d2", symbol: "VOO", date: "2025-12-15", amount: 11.50 },
+  { id: "d3", symbol: "MSFT", date: "2025-12-20", amount: 5.60 },
 ];
 
 /* ================== Utils ================== */
@@ -105,81 +97,82 @@ function rollingVol(values: number[], window = 30): Point[] {
   return pts;
 }
 
-/* ================== Market-data proxy (Yahoo Finance) ================== */
-const isProxyConfigured = Boolean(SUPABASE_URL);
+/* ================== Market Data (Yahoo Finance Direct) ================== */
+// Using Yahoo Finance v8 API directly - works on mobile/Expo without CORS issues
 
-function yahooProxy(params: Record<string, string>) {
-  if (!isProxyConfigured) {
-    return Promise.reject(new Error("SUPABASE_URL not configured - using mock data"));
-  }
-  const base = `${SUPABASE_URL}/functions/v1/yahoo-finance-proxy`;
-  const qs = new URLSearchParams(params).toString();
-  const url = `${base}?${qs}`;
-  return fetch(url, { cache: "no-store", referrerPolicy: "no-referrer" });
-}
+type YahooQuoteResult = {
+  symbol: string;
+  regularMarketPrice: number;
+  regularMarketChange: number;
+  regularMarketChangePercent: number;
+  regularMarketPreviousClose: number;
+};
 
-async function fetchQuotes(symbols: string[]): Promise<Record<string, number>> {
-  if (!isProxyConfigured || symbols.length === 0) {
-    return {};
-  }
+type QuoteData = {
+  price: number;
+  change: number;
+  changePercent: number;
+  previousClose: number;
+};
+
+async function fetchYahooQuotes(symbols: string[]): Promise<Record<string, QuoteData>> {
+  if (symbols.length === 0) return {};
+  
   try {
-    const r = await yahooProxy({ 
-      action: "quote", 
-      symbols: symbols.join(",") 
+    const url = `https://query1.finance.yahoo.com/v8/finance/quote?symbols=${symbols.join(",")}`;
+    const r = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0" },
     });
     
     if (!r.ok) {
-      console.warn(`fetchQuotes: ${r.status} error`);
+      console.warn(`Yahoo quotes failed: ${r.status}`);
       return {};
     }
     
     const data = await r.json();
-    const quotes = data?.quotes ?? {};
+    const quotes = data?.quoteResponse?.result ?? [];
     
-    // Extract just the prices
-    const result: Record<string, number> = {};
-    for (const [symbol, info] of Object.entries(quotes)) {
-      const quote = info as { price: number };
-      if (typeof quote?.price === "number" && quote.price > 0) {
-        result[symbol] = quote.price;
+    const result: Record<string, QuoteData> = {};
+    for (const q of quotes as YahooQuoteResult[]) {
+      if (q.symbol && typeof q.regularMarketPrice === "number") {
+        result[q.symbol] = {
+          price: q.regularMarketPrice,
+          change: q.regularMarketChange ?? 0,
+          changePercent: q.regularMarketChangePercent ?? 0,
+          previousClose: q.regularMarketPreviousClose ?? q.regularMarketPrice,
+        };
       }
     }
     return result;
   } catch (e) {
-    console.error("fetchQuotes error", e);
+    console.error("fetchYahooQuotes error:", e);
     return {};
   }
 }
 
-async function fetchCandles(symbol = "SPY"): Promise<number[]> {
-  if (!isProxyConfigured) {
-    return [];
-  }
+async function fetchYahooChart(symbol: string, range = "1y", interval = "1d"): Promise<number[]> {
   try {
-    const r = await yahooProxy({ 
-      action: "chart", 
-      symbols: symbol,
-      range: "1y",
-      interval: "1d"
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}`;
+    const r = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0" },
     });
     
     if (!r.ok) {
-      console.warn(`fetchCandles: ${r.status} error for ${symbol}`);
+      console.warn(`Yahoo chart failed for ${symbol}: ${r.status}`);
       return [];
     }
     
     const data = await r.json();
-    const prices = data?.prices ?? [];
+    const chartData = data?.chart?.result?.[0];
     
-    if (!Array.isArray(prices) || prices.length === 0) {
-      return [];
-    }
+    if (!chartData) return [];
     
-    return prices.filter((v: unknown): v is number => 
+    const closes = chartData.indicators?.quote?.[0]?.close ?? [];
+    return closes.filter((v: unknown): v is number => 
       typeof v === "number" && Number.isFinite(v) && v > 0
     );
   } catch (e) {
-    console.error("fetchCandles error", e);
+    console.error("fetchYahooChart error:", e);
     return [];
   }
 }
@@ -190,120 +183,98 @@ export default function Investments(): React.ReactElement {
   const insets = useSafeAreaInsets();
 
   const [holdings, setHoldings] = React.useState<Holding[]>(MOCK_HOLDINGS);
+  const [quoteData, setQuoteData] = React.useState<Record<string, QuoteData>>({});
   const [spy, setSpy] = React.useState<number[]>([]);
-  const [loading, setLoading] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
   const [err, setErr] = React.useState<string | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
+
+  // Load real-time market data
+  const loadMarketData = React.useCallback(async () => {
+    try {
+      // Get symbols from mock portfolio (excluding CASH)
+      const symbols = MOCK_HOLDINGS.filter((h) => h.symbol !== "CASH").map((h) => h.symbol);
+      
+      // Fetch real-time quotes from Yahoo Finance
+      const quotes = await fetchYahooQuotes(symbols);
+      setQuoteData(quotes);
+      
+      // Update holdings with real prices
+      const updatedHoldings = MOCK_HOLDINGS.map((h) => {
+        if (h.symbol === "CASH") return h;
+        const quote = quotes[h.symbol];
+        if (quote) {
+          return { ...h, current_price: quote.price };
+        }
+        return h;
+      });
+      setHoldings(updatedHoldings);
+      
+      // Fetch SPY historical data for benchmark charts
+      const spyData = await fetchYahooChart("SPY", "1y", "1d");
+      if (spyData.length > 0) {
+        setSpy(spyData);
+      }
+      
+      setErr(null);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to load market data";
+      setErr(msg);
+    }
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;
 
     const loadData = async () => {
       setLoading(true);
-      setErr(null);
-      try {
-        const { data, error } = await supabase
-          .from("investments")
-          .select("*")
-          .order("id", { ascending: false });
-
-        if (cancelled) return;
-
-        let rows: Holding[] = MOCK_HOLDINGS;
-        if (!error && Array.isArray(data) && data.length > 0) {
-          rows = data.map((r: SupabaseInvestmentRow, idx: number) => ({
-            id: r.id ?? idx,
-            symbol: String(r.symbol ?? r.ticker ?? `TICK${idx}`),
-            name: r.name ?? r.symbol ?? undefined,
-            quantity: Number(r.quantity ?? 0),
-            avg_price: Number(r.avg_price ?? r.price ?? 0),
-            current_price: Number(r.avg_price ?? r.price ?? 0),
-            sector: r.sector ?? undefined,
-          }));
-        }
-
-        const symbols = rows.filter((h) => h.symbol !== "CASH").map((h) => h.symbol);
-        const quotes = await fetchQuotes(symbols);
-
-        if (cancelled) return;
-
-        const merged = rows.map((h) =>
-          h.symbol === "CASH" ? h : { ...h, current_price: quotes[h.symbol] ?? h.current_price }
-        );
-        setHoldings(merged);
-
-        const s = await fetchCandles("SPY");
-
-        if (cancelled) return;
-
-        setSpy(s);
-      } catch (e: unknown) {
-        if (cancelled) return;
-        const msg = e instanceof Error ? e.message : "Load failed";
-        setErr(msg);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+      await loadMarketData();
+      if (!cancelled) {
+        setLoading(false);
       }
     };
 
     loadData();
 
+    // Refresh prices every 30 seconds
+    const interval = setInterval(() => {
+      if (!cancelled) {
+        loadMarketData();
+      }
+    }, 30000);
+
     return () => {
       cancelled = true;
+      clearInterval(interval);
     };
-  }, []);
+  }, [loadMarketData]);
 
   const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
-    setErr(null);
-    try {
-      const { data, error } = await supabase
-        .from("investments")
-        .select("*")
-        .order("id", { ascending: false });
-
-      let rows: Holding[] = MOCK_HOLDINGS;
-      if (!error && Array.isArray(data) && data.length > 0) {
-        rows = data.map((r: SupabaseInvestmentRow, idx: number) => ({
-          id: r.id ?? idx,
-          symbol: String(r.symbol ?? r.ticker ?? `TICK${idx}`),
-          name: r.name ?? r.symbol ?? undefined,
-          quantity: Number(r.quantity ?? 0),
-          avg_price: Number(r.avg_price ?? r.price ?? 0),
-          current_price: Number(r.avg_price ?? r.price ?? 0),
-          sector: r.sector ?? undefined,
-        }));
-      }
-
-      const symbols = rows.filter((h) => h.symbol !== "CASH").map((h) => h.symbol);
-      const quotes = await fetchQuotes(symbols);
-      const merged = rows.map((h) =>
-        h.symbol === "CASH" ? h : { ...h, current_price: quotes[h.symbol] ?? h.current_price }
-      );
-      setHoldings(merged);
-
-      const s = await fetchCandles("SPY");
-      setSpy(s);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Load failed";
-      setErr(msg);
-    } finally {
-      setRefreshing(false);
-    }
-  }, []);
+    await loadMarketData();
+    setRefreshing(false);
+  }, [loadMarketData]);
 
   /* ===== Derived metrics ===== */
   const derived = React.useMemo(() => {
     const totalValue = sum(holdings.map((h) => h.quantity * h.current_price));
     const nonCash = holdings.filter((h) => h.symbol !== "CASH");
-    const totalCost =
-      sum(nonCash.map((h) => h.quantity * h.avg_price)) +
-      (holdings.find((h) => h.symbol === "CASH")?.current_price ?? 0);
+    const cashHolding = holdings.find((h) => h.symbol === "CASH");
+    const cashValue = cashHolding ? cashHolding.quantity * cashHolding.current_price : 0;
+    
+    const totalCost = sum(nonCash.map((h) => h.quantity * h.avg_price)) + cashValue;
     const totalPL = totalValue - totalCost;
+    
+    // Calculate actual day P/L using previous close from Yahoo data
     const dayPL = sum(
-      nonCash.map((h) => h.quantity * (h.current_price - h.avg_price) * 0.002)
+      nonCash.map((h) => {
+        const quote = quoteData[h.symbol];
+        if (quote) {
+          // Day change = (current price - previous close) * quantity
+          return h.quantity * (quote.price - quote.previousClose);
+        }
+        return 0;
+      })
     );
 
     const weights = holdings
@@ -353,7 +324,7 @@ export default function Investments(): React.ReactElement {
       spyVol,
       benchYtd,
     };
-  }, [holdings, spy]);
+  }, [holdings, spy, quoteData]);
 
   /* ===== UI ===== */
   return (
@@ -592,46 +563,57 @@ export default function Investments(): React.ReactElement {
         </Animated.View>
       )}
 
-      {/* Positions (sparklines) */}
+      {/* Positions (sparklines) - Real-time from portfolio */}
       {ChartsReady && (
         <Animated.View entering={FadeInUp.delay(240).duration(360)}>
           <Card>
-            <Text style={s.h1} accessibilityRole="header">Positions (sparklines)</Text>
+            <Text style={s.h1} accessibilityRole="header">Positions (real-time)</Text>
             <View style={{ marginTop: 8, gap: 10 }}>
-              {(mockSparks as SparkPosition[]).map((p) => (
-                <View key={p.id} style={s.row}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.symbol}>{p.name}</Text>
-                    <Text
-                      style={[
-                        s.change,
-                        { color: p.change >= 0 ? "#16a34a" : "#ef4444" },
-                      ]}
-                    >
-                      {p.change >= 0 ? "+" : ""}
-                      {p.change}% today
-                    </Text>
+              {holdings.filter(h => h.symbol !== "CASH").map((h) => {
+                const quote = quoteData[h.symbol];
+                const changePercent = quote?.changePercent ?? 0;
+                // Generate mini sparkline from recent movement (simulated from change)
+                const basePrice = quote?.previousClose ?? h.current_price;
+                const sparkData = Array.from({ length: 12 }, (_, i) => {
+                  const progress = i / 11;
+                  const noise = (Math.random() - 0.5) * 0.002 * basePrice;
+                  return basePrice + (h.current_price - basePrice) * progress + noise;
+                });
+                
+                return (
+                  <View key={h.id} style={s.row}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.symbol}>{h.symbol}</Text>
+                      <Text
+                        style={[
+                          s.change,
+                          { color: changePercent >= 0 ? "#16a34a" : "#ef4444" },
+                        ]}
+                      >
+                        {changePercent >= 0 ? "+" : ""}
+                        {nf.format(changePercent)}% today
+                      </Text>
+                    </View>
+                    <View style={{ flexBasis: 120 }}>
+                      <CompactChart height={42}>
+                        {(w, ht) => (
+                          <VictoryChart
+                            width={w}
+                            height={ht}
+                            padding={{ left: 8, right: 8, top: 8, bottom: 8 }}
+                            containerComponent={<VictoryContainer responsive={false} />}
+                          >
+                            <VictoryLine
+                              data={sparkData.map((y: number, i: number) => ({ x: i + 1, y }))}
+                              style={{ data: { stroke: changePercent >= 0 ? "#16a34a" : "#ef4444", strokeWidth: 1.3 } }}
+                            />
+                          </VictoryChart>
+                        )}
+                      </CompactChart>
+                    </View>
                   </View>
-                  <View style={{ flexBasis: 120 }}>
-                    <CompactChart height={42}>
-                      {(w, h) => (
-                        <VictoryChart
-                          width={w}
-                          height={h}
-                          padding={{ left: 8, right: 8, top: 8, bottom: 8 }}
-                          containerComponent={<VictoryContainer responsive={false} />}
-                          animate={{ duration: 600 }}
-                        >
-                          <VictoryLine
-                            data={p.data.map((y: number, i: number) => ({ x: i + 1, y }))}
-                            style={{ data: { stroke: "#5b76f7", strokeWidth: 1.3 } }}
-                          />
-                        </VictoryChart>
-                      )}
-                    </CompactChart>
-                  </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           </Card>
         </Animated.View>
