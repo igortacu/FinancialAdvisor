@@ -138,20 +138,24 @@ function KPI({
 }) {
   return (
     <Card style={{ flex: 1 }}>
-      <Text style={{ color: "#6B7280", fontSize: 12 }}>{label}</Text>
-      <Text style={{ fontSize: 22, fontWeight: "800", marginTop: 4 }}>
-        {value}
-      </Text>
-      {delta ? (
-        <Text
-          style={{
-            color: delta.startsWith("+") ? "#16a34a" : "#ef4444",
-            marginTop: 2,
-          }}
-        >
-          {delta}
+      <View accessibilityRole="summary" accessibilityLabel={`${label}: ${value}${delta ? `, change: ${delta}` : ''}`}>
+        <Text style={{ color: "#6B7280", fontSize: 12 }} accessibilityRole="text">{label}</Text>
+        <Text style={{ fontSize: 22, fontWeight: "800", marginTop: 4 }} accessibilityRole="text">
+          {value}
         </Text>
-      ) : null}
+        {delta ? (
+          <Text
+            style={{
+              color: delta.startsWith("+") ? "#16a34a" : "#ef4444",
+              marginTop: 2,
+            }}
+            accessibilityRole="text"
+            accessibilityLabel={`Change: ${delta}`}
+          >
+            {delta}
+          </Text>
+        ) : null}
+      </View>
     </Card>
   );
 }
@@ -302,9 +306,16 @@ function MonthDropdown({
   return (
     <>
       {/* On web, the ref will become an HTMLElement; on native, a View */}
-      <Pressable ref={btnRef} style={buttonStyle} onPress={openMenu}>
+      <Pressable 
+        ref={btnRef} 
+        style={buttonStyle} 
+        onPress={openMenu}
+        accessibilityRole="button"
+        accessibilityLabel={`Select month, currently ${value === "All" ? "All Months" : value}`}
+        accessibilityHint="Opens month selection dropdown"
+      >
         <Text style={buttonTextStyle}>{value === "All" ? "All Months" : value}</Text>
-        <Text style={{ fontSize: 12, color: "#6B7280", marginLeft: 8, fontWeight: "600" }}>
+        <Text style={{ fontSize: 12, color: "#6B7280", marginLeft: 8, fontWeight: "600" }} accessibilityElementsHidden>
           {open ? "▲" : "▼"}
         </Text>
       </Pressable>
@@ -641,11 +652,11 @@ export default function Analytics() {
 
               {/* Budget controls: only enabled for the current month */}
               {isCurrentMonthSelected ? (
-                <View style={s.budgetControls}>
+                <View style={s.budgetControls} accessibilityLabel="Budget settings for current month">
                   <View style={s.budgetRow}>
                     <View style={s.budgetItem}>
-                      <View style={[s.legendDot, { backgroundColor: "#EF4444" }]} />
-                      <Text style={s.budgetLabel}>Needs</Text>
+                      <View style={[s.legendDot, { backgroundColor: "#EF4444" }]} accessibilityElementsHidden />
+                      <Text style={s.budgetLabel} nativeID="needs-label">Needs</Text>
                       <TextInput
                         style={s.budgetInput}
                         keyboardType="numeric"
@@ -653,11 +664,13 @@ export default function Analytics() {
                         onChangeText={(t) => setBudget("needs", t)}
                         placeholder="0"
                         editable
+                        accessibilityLabel="Needs budget amount"
+                        accessibilityLabelledBy="needs-label"
                       />
                     </View>
                     <View style={s.budgetItem}>
-                      <View style={[s.legendDot, { backgroundColor: "#F59E0B" }]} />
-                      <Text style={s.budgetLabel}>Wants</Text>
+                      <View style={[s.legendDot, { backgroundColor: "#F59E0B" }]} accessibilityElementsHidden />
+                      <Text style={s.budgetLabel} nativeID="wants-label">Wants</Text>
                       <TextInput
                         style={s.budgetInput}
                         keyboardType="numeric"
@@ -665,11 +678,13 @@ export default function Analytics() {
                         onChangeText={(t) => setBudget("wants", t)}
                         placeholder="0"
                         editable
+                        accessibilityLabel="Wants budget amount"
+                        accessibilityLabelledBy="wants-label"
                       />
                     </View>
                     <View style={s.budgetItem}>
-                      <View style={[s.legendDot, { backgroundColor: "#10B981" }]} />
-                      <Text style={s.budgetLabel}>Savings</Text>
+                      <View style={[s.legendDot, { backgroundColor: "#10B981" }]} accessibilityElementsHidden />
+                      <Text style={s.budgetLabel} nativeID="savings-label">Savings</Text>
                       <TextInput
                         style={s.budgetInput}
                         keyboardType="numeric"
@@ -677,12 +692,20 @@ export default function Analytics() {
                         onChangeText={(t) => setBudget("savings", t)}
                         placeholder="0"
                         editable
+                        accessibilityLabel="Savings budget amount"
+                        accessibilityLabelledBy="savings-label"
                       />
                     </View>
                   </View>
                   <View style={s.carryoverRow}>
-                    <Text style={s.carryoverLabel}>Carryover unused budget</Text>
-                    <Switch value={carryover} onValueChange={setCarryover} />
+                    <Text style={s.carryoverLabel} nativeID="carryover-label">Carryover unused budget</Text>
+                    <Switch 
+                      value={carryover} 
+                      onValueChange={setCarryover}
+                      accessibilityLabel="Carryover unused budget toggle"
+                      accessibilityRole="switch"
+                      accessibilityState={{ checked: carryover }}
+                    />
                   </View>
                 </View>
               ) : (
@@ -964,13 +987,16 @@ export default function Analytics() {
     <View style={s.sectionHeader}>
       <Text style={s.h1}>Cash Flow Forecast</Text>
       
-      <View style={s.periodSelector}>
+      <View style={s.periodSelector} accessibilityRole="radiogroup" accessibilityLabel="Forecast period selector">
         <Pressable
           onPress={() => setForecastPeriod("30")}
           style={[
             s.periodButton,
             forecastPeriod === "30" && s.periodButtonActive,
           ]}
+          accessibilityRole="radio"
+          accessibilityState={{ checked: forecastPeriod === "30" }}
+          accessibilityLabel="30 day forecast"
         >
           <Text
             style={[
@@ -987,6 +1013,9 @@ export default function Analytics() {
             s.periodButton,
             forecastPeriod === "90" && s.periodButtonActive,
           ]}
+          accessibilityRole="radio"
+          accessibilityState={{ checked: forecastPeriod === "90" }}
+          accessibilityLabel="90 day forecast"
         >
           <Text
             style={[
