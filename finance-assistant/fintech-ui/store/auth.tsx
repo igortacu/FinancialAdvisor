@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { supabase } from "@/api";
 import { getProfile } from "@/lib/profile";
 
@@ -13,11 +13,13 @@ type Ctx = {
   user: AuthUser | null; 
   setUser: (u: AuthUser | null) => void;
   isLoading: boolean;
+  refreshSession: () => Promise<void>;
 };
 const AuthCtx = createContext<Ctx>({ 
   user: null, 
   setUser: () => {},
-  isLoading: true 
+  isLoading: true,
+  refreshSession: async () => {} 
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -34,6 +36,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(!devMode); // Not loading if dev mode
   const [hasNetworkError, setHasNetworkError] = useState(false);
 
+  // Helper function to set user from session (with optional profile fetch)
+  const setUserFromSession = useCallback(async (authUser: any, skipProfileFetch = false) => {
+    if (!authUser) {
+      setUser(null);
+      return;
+    }
+    
+    // For OAuth/fast login, skip profile fetch and use metadata
+    if (skipProfileFetch) {
+      setUser({
+        id: authUser.id,
+        email: authUser.email,
+        name: authUser.user_metadata?.full_name ?? authUser.user_metadata?.name ?? null,
+        avatarUrl: authUser.user_metadata?.avatar_url ?? null,
+      });
+      return;
+    }
+    
+    try {
+      const profile = await Promise.race([
+        getProfile(authUser.id),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Profile fetch timeout')), 3000)
+        )
+      ]) as any;
+      
+      setUser({
+        id: authUser.id,
+        email: authUser.email,
+        name: profile?.name ?? authUser.user_metadata?.full_name ?? authUser.user_metadata?.name ?? null,
+        avatarUrl: authUser.user_metadata?.avatar_url ?? null,
+      });
+    } catch (profileError) {
+      console.log('⚠️ Profile fetch failed, using auth metadata');
+      setUser({
+        id: authUser.id,
+        email: authUser.email,
+        name: authUser.user_metadata?.full_name ?? authUser.user_metadata?.name ?? null,
+        avatarUrl: authUser.user_metadata?.avatar_url ?? null,
+      });
+    }
+  }, []);
+
+  // Function to manually refresh session - can be called after OAuth
+  const refreshSession = useCallback(async () => {
+    console.log('🔄 Manually refreshing session...');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        console.log('✅ Session found during refresh:', session.user.email);
+        await setUserFromSession(session.user);
+      } else {
+        console.log('⚠️ No session found during refresh');
+      }
+    } catch (error) {
+      console.error('❌ Error refreshing session:', error);
+    }
+  }, [setUserFromSession]);
+
   useEffect(() => {
     const init = async () => {
       // DEV MODE: Skip auth entirely if EXPO_PUBLIC_DEV_MODE is set
@@ -45,47 +106,91 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         console.log('🔵 Starting auth initialization...');
         
-        // Shorter timeout for faster failure on slow networks (3 seconds)
+        // Handle Web OAuth callback directly here (not in _layout.tsx)
+        // This ensures we process the tokens before checking session
+        if (typeof window !== 'undefined') {
+          const hash = window.location.hash;
+          if (hash && hash.includes('access_token')) {
+            console.log('🔐 Processing Web OAuth callback...');
+            
+            const params = new URLSearchParams(hash.substring(1));
+            const accessToken = params.get('access_token');
+            const refreshToken = params.get('refresh_token');
+            const error = params.get('error');
+            const errorDescription = params.get('error_description');
+            
+            if (error) {
+              console.error('❌ OAuth error:', error, errorDescription);
+              window.history.replaceState(null, '', window.location.pathname);
+            } else if (accessToken) {
+              // Decode JWT to get user info INSTANTLY (no network call)
+              try {
+                // Helper to decode base64url with proper UTF-8 support
+                const decodeBase64Url = (str: string): string => {
+                  // Convert base64url to base64
+                  const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+                  // Pad with '=' if needed
+                  const padded = base64 + '='.repeat((4 - base64.length % 4) % 4);
+                  // Decode base64 to binary string
+                  const binary = atob(padded);
+                  // Convert binary string to UTF-8
+                  const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+                  return new TextDecoder('utf-8').decode(bytes);
+                };
+                
+                const payload = JSON.parse(decodeBase64Url(accessToken.split('.')[1]));
+                const userId = payload.sub;
+                const email = payload.email;
+                const userMeta = payload.user_metadata || {};
+                
+                console.log('✅ OAuth user decoded:', email);
+                
+                // Set user immediately from JWT payload
+                setUser({
+                  id: userId,
+                  email: email,
+                  name: userMeta.full_name ?? userMeta.name ?? null,
+                  avatarUrl: userMeta.avatar_url ?? null,
+                });
+                setHasNetworkError(false);
+                setIsLoading(false);
+                window.history.replaceState(null, '', window.location.pathname);
+                
+                // Set session in background (don't wait)
+                if (refreshToken) {
+                  supabase.auth.setSession({
+                    access_token: accessToken,
+                    refresh_token: refreshToken,
+                  }).catch(err => console.warn('Background session set failed:', err));
+                }
+                
+                return; // Exit early - OAuth complete
+              } catch (decodeErr) {
+                console.error('❌ Failed to decode JWT:', decodeErr);
+              }
+              window.history.replaceState(null, '', window.location.pathname);
+            }
+          }
+        }
+        
+        // Use getSession - faster than getUser
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Network timeout - please check your connection')), 3000)
+          setTimeout(() => reject(new Error('Network timeout')), 4000)
         );
         
-        const authPromise = supabase.auth.getUser();
+        const authPromise = supabase.auth.getSession();
         
-        const { data: { user } } = await Promise.race([
+        const { data: { session } } = await Promise.race([
           authPromise,
           timeoutPromise
         ]) as any;
         
-        console.log('✅ Auth check complete:', user ? 'User found' : 'No user');
+        const authUser = session?.user;
+        console.log('✅ Auth check complete:', authUser ? 'User found' : 'No user');
         
-        if (user) {
-          // Fetch profile from database with shorter timeout (2 seconds)
-          try {
-            const profile = await Promise.race([
-              getProfile(user.id),
-              new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Profile fetch timeout')), 2000)
-              )
-            ]) as any;
-            
-            setUser({
-              id: user.id,
-              email: user.email,
-              name: profile?.name ?? user.user_metadata?.name ?? null,
-              avatarUrl: user.user_metadata?.avatar_url ?? null,
-            });
-            console.log('✅ User profile loaded');
-          } catch (profileError) {
-            console.log('⚠️ Profile fetch failed, using auth metadata:', profileError);
-            // Fall back to user metadata if profile fetch fails
-            setUser({
-              id: user.id,
-              email: user.email,
-              name: user.user_metadata?.name ?? null,
-              avatarUrl: user.user_metadata?.avatar_url ?? null,
-            });
-          }
+        if (authUser) {
+          await setUserFromSession(authUser);
+          console.log('✅ User profile loaded');
         }
         setHasNetworkError(false);
       } catch (error: any) {
@@ -110,25 +215,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (_ev, session) => {
-      const u = session?.user;
-      if (u) {
-        // Fetch profile from database
-        const profile = await getProfile(u.id);
-        
-        setUser({
-          id: u.id,
-          email: u.email,
-          name: profile?.name ?? u.user_metadata?.name ?? null,
-          avatarUrl: u.user_metadata?.avatar_url ?? null,
-        });
-      } else {
-        setUser(null);
-      }
+      console.log('🔔 Auth state changed:', _ev, session?.user?.email ?? 'no user');
+      await setUserFromSession(session?.user ?? null);
     });
     return () => sub.subscription.unsubscribe();
-  }, [devMode]);
+  }, [devMode, setUserFromSession]);
 
-  return <AuthCtx.Provider value={{ user, setUser, isLoading }}>{children}</AuthCtx.Provider>;
+  return <AuthCtx.Provider value={{ user, setUser, isLoading, refreshSession }}>{children}</AuthCtx.Provider>;
 }
 
 export const useAuth = () => useContext(AuthCtx);

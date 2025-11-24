@@ -52,35 +52,15 @@ function SetupScreen() {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   
-  // Handle OAuth callback for web
+  // Handle deep links for OAuth on mobile only
+  // Web OAuth is handled in AuthProvider
   useEffect(() => {
     if (Platform.OS === "web") {
-      const handleWebOAuthCallback = async () => {
-        const hash = window.location.hash;
-        if (hash && (hash.includes('access_token') || hash.includes('error'))) {
-          console.log("🔐 Web OAuth callback detected");
-          
-          // Supabase client will automatically handle the hash fragment
-          // Just need to trigger a session check
-          const { supabase } = await import("@/api");
-          const { data, error } = await supabase.auth.getSession();
-          
-          if (error) {
-            console.error("❌ Error getting session from OAuth:", error);
-          } else if (data.session) {
-            console.log("✅ Web OAuth session established:", data.session.user.email);
-            // Clear the hash from URL
-            window.history.replaceState(null, '', window.location.pathname);
-          }
-        }
-      };
-      
-      handleWebOAuthCallback();
+      // Web OAuth is handled in AuthProvider - no need to duplicate here
       return;
     }
     
     // Handle deep links for OAuth on mobile
-    
     const handleDeepLink = async (event: { url: string }) => {
       const url = event.url;
       console.log("🔗 Deep link received:", url);
