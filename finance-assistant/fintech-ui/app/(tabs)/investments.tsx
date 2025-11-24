@@ -22,7 +22,81 @@ import {
   VictoryBar,
   VictoryArea,
   ChartsReady,
+  VictoryLabel,
+  VictoryLegend,
 } from "@/lib/charts";
+
+/* ================== Chart Theme ================== */
+// Modern, vibrant color palette for charts
+const CHART_COLORS = {
+  // Primary gradient palette - vibrant and modern
+  primary: "#6366F1", // Indigo
+  primaryLight: "#818CF8",
+  primaryDark: "#4F46E5",
+  
+  // Accent colors for variety
+  accent1: "#8B5CF6", // Violet
+  accent2: "#EC4899", // Pink
+  accent3: "#F59E0B", // Amber
+  accent4: "#10B981", // Emerald
+  accent5: "#06B6D4", // Cyan
+  accent6: "#F43F5E", // Rose
+  
+  // Semantic colors
+  positive: "#10B981", // Emerald green
+  positiveLight: "#34D399",
+  negative: "#EF4444", // Red
+  negativeLight: "#F87171",
+  
+  // Neutral colors
+  neutral: "#64748B", // Slate
+  neutralLight: "#94A3B8",
+  neutralDark: "#475569",
+  
+  // Chart specific
+  grid: "#E2E8F0",
+  axis: "#94A3B8",
+  background: "#F8FAFC",
+};
+
+// Pie chart color scale - harmonious gradient
+const PIE_COLORS = [
+  "#6366F1", // Indigo
+  "#8B5CF6", // Violet
+  "#EC4899", // Pink
+  "#F59E0B", // Amber
+  "#10B981", // Emerald
+  "#06B6D4", // Cyan
+  "#F43F5E", // Rose
+];
+
+// Axis style presets
+const axisStyle = {
+  axis: { stroke: CHART_COLORS.neutralLight, strokeWidth: 1 },
+  grid: { stroke: CHART_COLORS.grid, strokeWidth: 1, strokeDasharray: "4,4" },
+  tickLabels: { 
+    fontSize: 10, 
+    fontWeight: "500" as const,
+    fill: CHART_COLORS.neutralDark,
+    padding: 4,
+  },
+  axisLabel: {
+    fontSize: 11,
+    fontWeight: "600" as const,
+    fill: CHART_COLORS.neutral,
+  },
+};
+
+const axisStyleClean = {
+  axis: { stroke: "transparent" },
+  grid: { stroke: CHART_COLORS.grid, strokeWidth: 1, strokeDasharray: "4,4" },
+  tickLabels: { 
+    fontSize: 10, 
+    fontWeight: "500" as const,
+    fill: CHART_COLORS.neutralDark,
+    padding: 4,
+  },
+};
 
 /* ================== Types ================== */
 type Holding = {
@@ -399,7 +473,12 @@ export default function Investments(): React.ReactElement {
       {/* Snapshot */}
       <Animated.View entering={FadeInUp.duration(320)}>
         <Card>
-          <Text style={s.h1} accessibilityRole="header">Snapshot</Text>
+          <View style={s.chartHeader}>
+            <Text style={s.h1} accessibilityRole="header">Portfolio Snapshot</Text>
+            <View style={[s.chartBadge, { backgroundColor: "#F0FDF4" }]}>
+              <Text style={[s.chartBadgeText, { color: CHART_COLORS.positive }]}>Live</Text>
+            </View>
+          </View>
           <View style={s.kpiRow} accessibilityRole="summary">
             <View style={s.kpi} accessibilityLabel={`Portfolio value: ${money(derived.totalValue)}`}>
               <Text style={s.kpiLabel}>Value</Text>
@@ -407,39 +486,41 @@ export default function Investments(): React.ReactElement {
             </View>
             <View style={s.kpi} accessibilityLabel={`Day profit or loss: ${money(derived.dayPL)}`}>
               <Text style={s.kpiLabel}>Day P/L</Text>
-              <Text style={[s.kpiValue, { color: derived.dayPL >= 0 ? "#16a34a" : "#ef4444" }]}>
-                {money(derived.dayPL)}
+              <Text style={[s.kpiValue, { color: derived.dayPL >= 0 ? CHART_COLORS.positive : CHART_COLORS.negative }]}>
+                {derived.dayPL >= 0 ? "+" : ""}{money(derived.dayPL)}
               </Text>
             </View>
             <View style={s.kpi} accessibilityLabel={`Total profit or loss: ${money(derived.totalPL)}`}>
               <Text style={s.kpiLabel}>Total P/L</Text>
-              <Text style={[s.kpiValue, { color: derived.totalPL >= 0 ? "#16a34a" : "#ef4444" }]}>
-                {money(derived.totalPL)}
+              <Text style={[s.kpiValue, { color: derived.totalPL >= 0 ? CHART_COLORS.positive : CHART_COLORS.negative }]}>
+                {derived.totalPL >= 0 ? "+" : ""}{money(derived.totalPL)}
               </Text>
             </View>
           </View>
-          <View style={[s.kpiRow, { marginTop: 8 }]}>
+          <View style={s.kpiRow}>
             <View style={s.kpi} accessibilityLabel={`Benchmark SPY year to date: ${pct(derived.benchYtd)}`}>
               <Text style={s.kpiLabel}>Benchmark (SPY YTD)</Text>
-              <Text style={[s.kpiValue, { color: derived.benchYtd >= 0 ? "#16a34a" : "#ef4444" }]}>
-                {pct(derived.benchYtd)}
+              <Text style={[s.kpiValue, { color: derived.benchYtd >= 0 ? CHART_COLORS.positive : CHART_COLORS.negative }]}>
+                {derived.benchYtd >= 0 ? "+" : ""}{pct(derived.benchYtd)}
               </Text>
             </View>
             <View style={s.kpi} accessibilityLabel={`Top holding weight: ${nf.format((derived.topWeight || 0) * 100)} percent`}>
               <Text style={s.kpiLabel}>Top Weight</Text>
-              <Text style={s.kpiValue}>{nf.format((derived.topWeight || 0) * 100)}%</Text>
+              <Text style={[s.kpiValue, { color: derived.topWeight > 0.2 ? CHART_COLORS.accent3 : CHART_COLORS.neutralDark }]}>
+                {nf.format((derived.topWeight || 0) * 100)}%
+              </Text>
             </View>
           </View>
           {derived.topWeight > 0.2 && (
             <View style={s.notice} accessibilityRole="alert">
               <Text style={s.noticeText}>
-                Risk: top position {Math.round(derived.topWeight * 100)}% of portfolio.
+                ⚠️ Concentration risk: top position {Math.round(derived.topWeight * 100)}% of portfolio
               </Text>
             </View>
           )}
           {err && err.includes("403") && (
-            <Text style={{ color: "#ef4444", marginTop: 8 }}>
-              Live candles blocked earlier. Proxy + fallback active.
+            <Text style={{ color: CHART_COLORS.negative, marginTop: 8, fontSize: 12 }}>
+              Live candles blocked. Using fallback data.
             </Text>
           )}
         </Card>
@@ -449,20 +530,36 @@ export default function Investments(): React.ReactElement {
       {ChartsReady && (
         <Animated.View entering={FadeInUp.duration(360)}>
           <Card>
-            <Text style={s.h1} accessibilityRole="header">Allocation (sectors)</Text>
-            <CompactChart height={190}>
+            <View style={s.chartHeader}>
+              <Text style={s.h1} accessibilityRole="header">Allocation</Text>
+              <View style={s.chartBadge}>
+                <Text style={s.chartBadgeText}>Sectors</Text>
+              </View>
+            </View>
+            <CompactChart height={210}>
               {(w, h) => (
                 <VictoryPie
                   width={w}
                   height={h}
-                  innerRadius={58}
-                  padAngle={2}
-                  labelRadius={h / 2 - 18}
-                  animate={{ duration: 800 }}
+                  innerRadius={62}
+                  padAngle={3}
+                  cornerRadius={6}
+                  labelRadius={90}
+                  animate={{ duration: 800, easing: "backOut" }}
                   data={derived.allocPie.length ? derived.allocPie : [{ x: "Unclassified", y: 100 }]}
-                  colorScale={["#246BFD", "#5b76f7", "#9db7ff", "#111827", "#a78bfa", "#f59e0b", "#10b981"]}
+                  colorScale={PIE_COLORS}
                   labels={({ datum }: { datum: PieChartDatum }) => `${datum.x}\n${nf.format(datum.y)}%`}
-                  style={{ labels: { fontSize: 10, fill: "#111827" } }}
+                  style={{ 
+                    labels: { 
+                      fontSize: 10, 
+                      fontWeight: "600",
+                      fill: CHART_COLORS.neutralDark,
+                    },
+                    data: {
+                      stroke: "#fff",
+                      strokeWidth: 2,
+                    }
+                  }}
                 />
               )}
             </CompactChart>
@@ -474,26 +571,48 @@ export default function Investments(): React.ReactElement {
       {ChartsReady && (
         <Animated.View entering={FadeInUp.delay(80).duration(360)}>
           <Card>
-            <Text style={s.h1} accessibilityRole="header">Weights by holding</Text>
-            <CompactChart height={200}>
+            <View style={s.chartHeader}>
+              <Text style={s.h1} accessibilityRole="header">Weights</Text>
+              <View style={s.chartBadge}>
+                <Text style={s.chartBadgeText}>By Holding</Text>
+              </View>
+            </View>
+            <CompactChart height={220}>
               {(w, h) => (
                 <VictoryChart
                   width={w}
                   height={h}
-                  padding={{ left: 48, right: 12, top: 8, bottom: 28 }}
+                  padding={{ left: 52, right: 16, top: 16, bottom: 36 }}
                   containerComponent={<VictoryContainer responsive={false} />}
-                  animate={{ duration: 600 }}
+                  animate={{ duration: 600, easing: "backOut" }}
+                  domainPadding={{ x: 20 }}
                 >
                   <VictoryAxis
                     dependentAxis
                     tickFormat={(t: number) => `${t}%`}
-                    style={{ grid: { stroke: "#EEF2F7" }, tickLabels: { fontSize: 9 } }}
+                    style={axisStyleClean}
                   />
-                  <VictoryAxis style={{ tickLabels: { fontSize: 9 } }} />
+                  <VictoryAxis 
+                    style={{
+                      ...axisStyleClean,
+                      tickLabels: { 
+                        ...axisStyleClean.tickLabels, 
+                        fontSize: 11,
+                        fontWeight: "600" as const,
+                        angle: -15,
+                      }
+                    }} 
+                  />
                   <VictoryBar
                     data={derived.weightBars.length ? derived.weightBars : [{ x: "N/A", y: 0 }]}
-                    style={{ data: { fill: "#246BFD" } }}
-                    barRatio={0.6}
+                    cornerRadius={{ top: 6 }}
+                    barRatio={0.65}
+                    style={{ 
+                      data: { 
+                        fill: CHART_COLORS.primary,
+                        fillOpacity: 0.9,
+                      } 
+                    }}
                   />
                 </VictoryChart>
               )}
@@ -506,28 +625,50 @@ export default function Investments(): React.ReactElement {
       {ChartsReady && (
         <Animated.View entering={FadeInUp.delay(120).duration(360)}>
           <Card>
-            <Text style={s.h1} accessibilityRole="header">P/L by holding</Text>
-            <CompactChart height={200}>
+            <View style={s.chartHeader}>
+              <Text style={s.h1} accessibilityRole="header">Profit / Loss</Text>
+              <View style={[s.chartBadge, { backgroundColor: derived.totalPL >= 0 ? "#ECFDF5" : "#FEF2F2" }]}>
+                <Text style={[s.chartBadgeText, { color: derived.totalPL >= 0 ? CHART_COLORS.positive : CHART_COLORS.negative }]}>
+                  {derived.totalPL >= 0 ? "▲" : "▼"} {money(Math.abs(derived.totalPL))}
+                </Text>
+              </View>
+            </View>
+            <CompactChart height={220}>
               {(w, h) => (
                 <VictoryChart
                   width={w}
                   height={h}
-                  padding={{ left: 48, right: 12, top: 8, bottom: 28 }}
+                  padding={{ left: 56, right: 16, top: 16, bottom: 36 }}
                   containerComponent={<VictoryContainer responsive={false} />}
-                  animate={{ duration: 600 }}
+                  animate={{ duration: 600, easing: "backOut" }}
+                  domainPadding={{ x: 20 }}
                 >
                   <VictoryAxis
                     dependentAxis
                     tickFormat={(t: number) => money(t)}
-                    style={{ grid: { stroke: "#EEF2F7" }, tickLabels: { fontSize: 9 } }}
+                    style={axisStyleClean}
                   />
-                  <VictoryAxis style={{ tickLabels: { fontSize: 9 } }} />
+                  <VictoryAxis 
+                    style={{
+                      ...axisStyleClean,
+                      tickLabels: { 
+                        ...axisStyleClean.tickLabels, 
+                        fontSize: 11,
+                        fontWeight: "600" as const,
+                        angle: -15,
+                      }
+                    }} 
+                  />
                   <VictoryBar
                     data={derived.pnlBars.length ? derived.pnlBars : [{ x: "N/A", y: 0 }]}
+                    cornerRadius={({ datum }: { datum: BarChartDatum }) => datum.y >= 0 ? { top: 6 } : { bottom: 6 }}
+                    barRatio={0.65}
                     style={{
-                      data: ({ datum }: { datum: BarChartDatum }) => ({ fill: datum.y >= 0 ? "#16a34a" : "#ef4444" }),
+                      data: ({ datum }: { datum: BarChartDatum }) => ({ 
+                        fill: datum.y >= 0 ? CHART_COLORS.positive : CHART_COLORS.negative,
+                        fillOpacity: 0.9,
+                      }),
                     }}
-                    barRatio={0.6}
                   />
                 </VictoryChart>
               )}
@@ -540,23 +681,28 @@ export default function Investments(): React.ReactElement {
       {ChartsReady && (
         <Animated.View entering={FadeInUp.delay(160).duration(360)}>
           <Card>
-            <Text style={s.h1} accessibilityRole="header">Benchmark drawdown (SPY YTD)</Text>
-            <CompactChart height={190}>
+            <View style={s.chartHeader}>
+              <Text style={s.h1} accessibilityRole="header">Benchmark Drawdown</Text>
+              <View style={[s.chartBadge, { backgroundColor: "#FEF2F2" }]}>
+                <Text style={[s.chartBadgeText, { color: CHART_COLORS.negative }]}>SPY YTD</Text>
+              </View>
+            </View>
+            <CompactChart height={200}>
               {(w, h) => (
                 <VictoryChart
                   width={w}
                   height={h}
-                  padding={{ left: 48, right: 12, top: 8, bottom: 28 }}
+                  padding={{ left: 52, right: 16, top: 16, bottom: 32 }}
                   containerComponent={<VictoryContainer responsive={false} />}
-                  animate={{ duration: 600 }}
+                  animate={{ duration: 700, easing: "cubicInOut" }}
                 >
                   <VictoryAxis
                     dependentAxis
                     tickFormat={(t: number) => `${t}%`}
-                    style={{ grid: { stroke: "#EEF2F7" }, tickLabels: { fontSize: 9 } }}
+                    style={axisStyleClean}
                   />
-                  <VictoryAxis style={{ tickLabels: { fontSize: 9 } }} />
-                  <VictoryLine
+                  <VictoryAxis style={axisStyleClean} />
+                  <VictoryArea
                     data={
                       derived.spyDD.length
                         ? derived.spyDD
@@ -565,7 +711,16 @@ export default function Investments(): React.ReactElement {
                             { x: 2, y: 0 },
                           ]
                     }
-                    style={{ data: { stroke: "#ef4444", strokeWidth: 1.8 } }}
+                    style={{
+                      data: {
+                        fill: CHART_COLORS.negative,
+                        fillOpacity: 0.15,
+                        stroke: CHART_COLORS.negative,
+                        strokeWidth: 2.5,
+                        strokeLinecap: "round",
+                      },
+                    }}
+                    interpolation="monotoneX"
                   />
                 </VictoryChart>
               )}
@@ -578,22 +733,27 @@ export default function Investments(): React.ReactElement {
       {ChartsReady && (
         <Animated.View entering={FadeInUp.delay(200).duration(360)}>
           <Card>
-            <Text style={s.h1} accessibilityRole="header">Rolling volatility (SPY · 30D)</Text>
-            <CompactChart height={190}>
+            <View style={s.chartHeader}>
+              <Text style={s.h1} accessibilityRole="header">Rolling Volatility</Text>
+              <View style={[s.chartBadge, { backgroundColor: "#EEF2FF" }]}>
+                <Text style={[s.chartBadgeText, { color: CHART_COLORS.primary }]}>SPY · 30D</Text>
+              </View>
+            </View>
+            <CompactChart height={200}>
               {(w, h) => (
                 <VictoryChart
                   width={w}
                   height={h}
-                  padding={{ left: 48, right: 12, top: 8, bottom: 28 }}
+                  padding={{ left: 52, right: 16, top: 16, bottom: 32 }}
                   containerComponent={<VictoryContainer responsive={false} />}
-                  animate={{ duration: 600 }}
+                  animate={{ duration: 700, easing: "cubicInOut" }}
                 >
                   <VictoryAxis
                     dependentAxis
                     tickFormat={(t: number) => `${nf.format(t)}%`}
-                    style={{ grid: { stroke: "#EEF2F7" }, tickLabels: { fontSize: 9 } }}
+                    style={axisStyleClean}
                   />
-                  <VictoryAxis style={{ tickLabels: { fontSize: 9 } }} />
+                  <VictoryAxis style={axisStyleClean} />
                   <VictoryArea
                     data={
                       derived.spyVol.length
@@ -605,12 +765,14 @@ export default function Investments(): React.ReactElement {
                     }
                     style={{
                       data: {
-                        fillOpacity: 0.25,
-                        fill: "#5b76f7",
-                        stroke: "#5b76f7",
-                        strokeWidth: 1.5,
+                        fill: CHART_COLORS.accent1,
+                        fillOpacity: 0.2,
+                        stroke: CHART_COLORS.accent1,
+                        strokeWidth: 2.5,
+                        strokeLinecap: "round",
                       },
                     }}
+                    interpolation="monotoneX"
                   />
                 </VictoryChart>
               )}
@@ -623,45 +785,62 @@ export default function Investments(): React.ReactElement {
       {ChartsReady && (
         <Animated.View entering={FadeInUp.delay(240).duration(360)}>
           <Card>
-            <Text style={s.h1} accessibilityRole="header">Positions (real-time)</Text>
-            <View style={{ marginTop: 8, gap: 10 }}>
+            <View style={s.chartHeader}>
+              <Text style={s.h1} accessibilityRole="header">Positions</Text>
+              <View style={[s.chartBadge, { backgroundColor: "#F0FDF4" }]}>
+                <Text style={[s.chartBadgeText, { color: CHART_COLORS.positive }]}>Real-time</Text>
+              </View>
+            </View>
+            <View style={{ marginTop: 12, gap: 12 }}>
               {holdings.filter(h => h.symbol !== "CASH").map((h) => {
                 const quote = quoteData[h.symbol];
                 const changePercent = quote?.changePercent ?? 0;
+                const isPositive = changePercent >= 0;
                 // Generate mini sparkline from recent movement (simulated from change)
                 const basePrice = quote?.previousClose ?? h.current_price;
-                const sparkData = Array.from({ length: 12 }, (_, i) => {
-                  const progress = i / 11;
+                const sparkData = Array.from({ length: 16 }, (_, i) => {
+                  const progress = i / 15;
                   const noise = (Math.random() - 0.5) * 0.002 * basePrice;
                   return basePrice + (h.current_price - basePrice) * progress + noise;
                 });
+                const sparkColor = isPositive ? CHART_COLORS.positive : CHART_COLORS.negative;
                 
                 return (
-                  <View key={h.id} style={s.row}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.symbol}>{h.symbol}</Text>
-                      <Text
-                        style={[
-                          s.change,
-                          { color: changePercent >= 0 ? "#16a34a" : "#ef4444" },
-                        ]}
-                      >
-                        {changePercent >= 0 ? "+" : ""}
-                        {nf.format(changePercent)}% today
-                      </Text>
+                  <View key={h.id} style={s.sparkRow}>
+                    <View style={{ flex: 1, minWidth: 80 }}>
+                      <Text style={s.sparkSymbol}>{h.symbol}</Text>
+                      <View style={[s.changeChip, { backgroundColor: isPositive ? "#F0FDF4" : "#FEF2F2" }]}>
+                        <Text
+                          style={[
+                            s.changeChipText,
+                            { color: isPositive ? CHART_COLORS.positive : CHART_COLORS.negative },
+                          ]}
+                        >
+                          {isPositive ? "▲" : "▼"} {Math.abs(changePercent).toFixed(2)}%
+                        </Text>
+                      </View>
                     </View>
-                    <View style={{ flexBasis: 120 }}>
-                      <CompactChart height={42}>
+                    <View style={{ flexBasis: 140 }}>
+                      <CompactChart height={48}>
                         {(w, ht) => (
                           <VictoryChart
                             width={w}
                             height={ht}
-                            padding={{ left: 8, right: 8, top: 8, bottom: 8 }}
+                            padding={{ left: 4, right: 4, top: 6, bottom: 6 }}
                             containerComponent={<VictoryContainer responsive={false} />}
                           >
-                            <VictoryLine
+                            <VictoryArea
                               data={sparkData.map((y: number, i: number) => ({ x: i + 1, y }))}
-                              style={{ data: { stroke: changePercent >= 0 ? "#16a34a" : "#ef4444", strokeWidth: 1.3 } }}
+                              interpolation="monotoneX"
+                              style={{ 
+                                data: { 
+                                  fill: sparkColor,
+                                  fillOpacity: 0.15,
+                                  stroke: sparkColor, 
+                                  strokeWidth: 2,
+                                  strokeLinecap: "round",
+                                } 
+                              }}
                             />
                           </VictoryChart>
                         )}
@@ -678,7 +857,12 @@ export default function Investments(): React.ReactElement {
       {/* Holdings list with live prices */}
       <Animated.View entering={FadeInUp.delay(280).duration(360)}>
         <Card>
-          <Text style={s.h1} accessibilityRole="header">Your investments</Text>
+          <View style={s.chartHeader}>
+            <Text style={s.h1} accessibilityRole="header">Your Investments</Text>
+            <View style={s.chartBadge}>
+              <Text style={s.chartBadgeText}>{holdings.length} holdings</Text>
+            </View>
+          </View>
           {loading ? (
             <View style={{ paddingVertical: 16 }} accessibilityLabel="Loading investments">
               <ActivityIndicator accessibilityLabel="Loading indicator" />
@@ -713,12 +897,12 @@ export default function Investments(): React.ReactElement {
                         {h.symbol}
                         {h.name ? ` · ${h.name}` : ""}
                       </Text>
-                      <Text style={{ color: "#6B7280", marginTop: 2 }}>
+                      <Text style={s.holdingDetails}>
                         Qty {h.quantity} @ {money(h.avg_price)} · Value {money(value)}
                       </Text>
                     </View>
-                    <Text style={{ fontWeight: "800", color: pnl >= 0 ? "#16a34a" : "#ef4444" }}>
-                      {money(pnl)}
+                    <Text style={[s.pnlValue, { color: pnl >= 0 ? CHART_COLORS.positive : CHART_COLORS.negative }]}>
+                      {pnl >= 0 ? "+" : ""}{money(pnl)}
                     </Text>
                   </View>
                 );
@@ -732,26 +916,43 @@ export default function Investments(): React.ReactElement {
       {ChartsReady && (
         <Animated.View entering={FadeInUp.delay(320).duration(360)}>
           <Card>
-            <Text style={s.h1} accessibilityRole="header">Dividends (next 30–45 days)</Text>
-            <CompactChart height={180}>
+            <View style={s.chartHeader}>
+              <Text style={s.h1} accessibilityRole="header">Dividends</Text>
+              <View style={[s.chartBadge, { backgroundColor: "#FEF3C7" }]}>
+                <Text style={[s.chartBadgeText, { color: "#D97706" }]}>Next 30–45 days</Text>
+              </View>
+            </View>
+            <CompactChart height={200}>
               {(w, h) => (
                 <VictoryChart
                   width={w}
                   height={h}
-                  padding={{ left: 48, right: 12, top: 8, bottom: 28 }}
+                  padding={{ left: 52, right: 16, top: 16, bottom: 36 }}
                   containerComponent={<VictoryContainer responsive={false} />}
-                  animate={{ duration: 600 }}
+                  animate={{ duration: 600, easing: "backOut" }}
+                  domainPadding={{ x: 20 }}
                 >
                   <VictoryAxis
                     dependentAxis
                     tickFormat={(t: number) => money(t)}
-                    style={{ grid: { stroke: "#EEF2F7" }, tickLabels: { fontSize: 9 } }}
+                    style={axisStyleClean}
                   />
-                  <VictoryAxis style={{ tickLabels: { fontSize: 9 } }} />
+                  <VictoryAxis 
+                    style={{
+                      ...axisStyleClean,
+                      tickLabels: { ...axisStyleClean.tickLabels, fontSize: 10 }
+                    }} 
+                  />
                   <VictoryBar
                     data={MOCK_DIVIDENDS.map((d) => ({ x: d.date.slice(5), y: d.amount }))}
-                    style={{ data: { fill: "#246BFD" } }}
+                    cornerRadius={{ top: 5 }}
                     barRatio={0.6}
+                    style={{ 
+                      data: { 
+                        fill: CHART_COLORS.accent3,
+                        fillOpacity: 0.9,
+                      } 
+                    }}
                   />
                 </VictoryChart>
               )}
@@ -764,8 +965,13 @@ export default function Investments(): React.ReactElement {
       {ChartsReady && (
         <Animated.View entering={FadeInUp.delay(360).duration(360)}>
           <Card>
-            <Text style={s.h1} accessibilityRole="header">DCA cumulative (mock)</Text>
-            <CompactChart height={180}>
+            <View style={s.chartHeader}>
+              <Text style={s.h1} accessibilityRole="header">DCA Cumulative</Text>
+              <View style={[s.chartBadge, { backgroundColor: "#ECFDF5" }]}>
+                <Text style={[s.chartBadgeText, { color: CHART_COLORS.positive }]}>Investing</Text>
+              </View>
+            </View>
+            <CompactChart height={200}>
               {(w, h) => {
                 const seq = [200, 100, 200, 100, 200, 100, 200];
                 let acc = 0;
@@ -777,24 +983,26 @@ export default function Investments(): React.ReactElement {
                   <VictoryChart
                     width={w}
                     height={h}
-                    padding={{ left: 48, right: 12, top: 8, bottom: 28 }}
+                    padding={{ left: 52, right: 16, top: 16, bottom: 32 }}
                     containerComponent={<VictoryContainer responsive={false} />}
-                    animate={{ duration: 600 }}
+                    animate={{ duration: 700, easing: "cubicInOut" }}
                   >
                     <VictoryAxis
                       dependentAxis
                       tickFormat={(t: number) => money(t)}
-                      style={{ grid: { stroke: "#EEF2F7" }, tickLabels: { fontSize: 9 } }}
+                      style={axisStyleClean}
                     />
-                    <VictoryAxis style={{ tickLabels: { fontSize: 9 } }} />
+                    <VictoryAxis style={axisStyleClean} />
                     <VictoryArea
                       data={series}
+                      interpolation="monotoneX"
                       style={{
                         data: {
-                          fillOpacity: 0.25,
-                          fill: "#10b981",
-                          stroke: "#10b981",
-                          strokeWidth: 1.6,
+                          fill: CHART_COLORS.positive,
+                          fillOpacity: 0.2,
+                          stroke: CHART_COLORS.positive,
+                          strokeWidth: 2.5,
+                          strokeLinecap: "round",
                         },
                       }}
                     />
@@ -810,36 +1018,113 @@ export default function Investments(): React.ReactElement {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#F5F7FB" },
-  h1: { fontSize: 16, fontWeight: "800" },
+  root: { flex: 1, backgroundColor: "#F8FAFC" },
+  h1: { fontSize: 17, fontWeight: "800", color: "#1E293B" },
+  
+  // Chart header with badge
+  chartHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  chartBadge: {
+    backgroundColor: "#EEF2FF",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  chartBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: CHART_COLORS.primary,
+  },
+  
+  // Holdings row
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 10,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
-  symbol: { fontWeight: "800", fontSize: 14 },
+  symbol: { fontWeight: "800", fontSize: 15, color: "#1E293B" },
   change: { marginTop: 2, fontWeight: "700" },
-  kpiRow: { marginTop: 10, flexDirection: "row", gap: 10 },
-  kpi: { flex: 1, backgroundColor: "#fff", borderRadius: 12, padding: 10 },
-  kpiLabel: { fontSize: 12, color: "#6B7280", fontWeight: "700" },
-  kpiValue: { fontSize: 16, fontWeight: "800", marginTop: 2 },
-  notice: {
-    marginTop: 10,
-    backgroundColor: "#FFF7ED",
-    borderRadius: 10,
-    padding: 10,
+  
+  // Sparkline rows
+  sparkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FAFBFC",
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
-  noticeText: { color: "#C2410C", fontWeight: "700" },
-  retry: {
-    marginTop: 10,
+  sparkSymbol: { 
+    fontWeight: "800", 
+    fontSize: 15, 
+    color: "#1E293B",
+    marginBottom: 4,
+  },
+  changeChip: {
     alignSelf: "flex-start",
-    backgroundColor: "#111827",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 8,
   },
-  retryText: { color: "#fff", fontWeight: "700" },
+  changeChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  
+  // Holdings details
+  holdingDetails: {
+    color: "#64748B",
+    marginTop: 3,
+    fontSize: 13,
+  },
+  pnlValue: {
+    fontWeight: "800",
+    fontSize: 15,
+  },
+  
+  // KPI section
+  kpiRow: { marginTop: 12, flexDirection: "row", gap: 10 },
+  kpi: { 
+    flex: 1, 
+    backgroundColor: "#FAFBFC", 
+    borderRadius: 14, 
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  kpiLabel: { fontSize: 12, color: "#64748B", fontWeight: "600" },
+  kpiValue: { fontSize: 18, fontWeight: "800", marginTop: 3, color: "#1E293B" },
+  
+  // Notice/Alert
+  notice: {
+    marginTop: 12,
+    backgroundColor: "#FFF7ED",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#FFEDD5",
+  },
+  noticeText: { color: "#C2410C", fontWeight: "700", fontSize: 13 },
+  
+  // Retry button
+  retry: {
+    marginTop: 12,
+    alignSelf: "flex-start",
+    backgroundColor: "#4F46E5",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  retryText: { color: "#fff", fontWeight: "700", fontSize: 14 },
 });
