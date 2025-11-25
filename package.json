@@ -1,0 +1,50 @@
+{
+  "name": "financial-advisor",
+  "version": "1.1.0",
+  "description": "Financial Advisor - Personal Finance Management App",
+  "private": true,
+  "workspaces": [
+    "finance-assistant/fintech-ui"
+  ],
+  "scripts": {
+    "dev": "npm run start --workspace=finance-assistant/fintech-ui",
+    "start": "npm run start --workspace=finance-assistant/fintech-ui",
+    "build": "npm run build --workspace=finance-assistant/fintech-ui",
+    "lint": "npm run lint --workspace=finance-assistant/fintech-ui",
+    "test": "echo \"No tests configured yet\"",
+    "prepare": "husky",
+    "commit": "cz",
+    "release": "standard-version",
+    "release:minor": "standard-version --release-as minor",
+    "release:major": "standard-version --release-as major",
+    "release:patch": "standard-version --release-as patch",
+    "release:first": "standard-version --first-release",
+    "release:dry": "standard-version --dry-run",
+    "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s",
+    "changelog:all": "conventional-changelog -p angular -i CHANGELOG.md -s -r 0"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.0.0",
+    "@commitlint/config-conventional": "^19.0.0",
+    "commitizen": "^4.3.0",
+    "conventional-changelog-cli": "^4.1.0",
+    "cz-conventional-changelog": "^3.3.0",
+    "husky": "^9.0.0",
+    "standard-version": "^9.5.0"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/igortacu/FinancialAdvisor.git"
+  },
+  "author": "Igor Tacu",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/igortacu/FinancialAdvisor/issues"
+  },
+  "homepage": "https://github.com/igortacu/FinancialAdvisor#readme"
+}
