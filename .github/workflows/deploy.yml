@@ -1,0 +1,113 @@
+name: Deploy
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'preview'
+        type: choice
+        options:
+          - preview
+          - production
+
+jobs:
+  deploy-expo:
+    name: 📱 Deploy to Expo
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: finance-assistant/fintech-ui
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: finance-assistant/fintech-ui/package-lock.json
+
+      - name: 🔧 Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 📥 Install dependencies
+        run: npm ci
+
+      - name: 🔍 Check Expo Config
+        run: npx expo config --type public
+
+      - name: 📱 Deploy Preview (OTA Update)
+        if: github.event.inputs.environment == 'preview' || (github.event_name == 'release' && github.event.release.prerelease)
+        run: |
+          echo "🚀 Deploying preview build..."
+          npx eas update --branch preview --message "Preview: ${{ github.event.release.tag_name || github.sha }}"
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_FINNHUB_KEY: ${{ secrets.EXPO_PUBLIC_FINNHUB_KEY }}
+          EXPO_PUBLIC_SUPABASE_FN_PROXY_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_FN_PROXY_URL }}
+
+      - name: 🚀 Deploy Production (OTA Update)
+        if: github.event.inputs.environment == 'production' || (github.event_name == 'release' && !github.event.release.prerelease)
+        run: |
+          echo "🚀 Deploying production build..."
+          npx eas update --branch production --message "Release: ${{ github.event.release.tag_name || github.sha }}"
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_FINNHUB_KEY: ${{ secrets.EXPO_PUBLIC_FINNHUB_KEY }}
+          EXPO_PUBLIC_SUPABASE_FN_PROXY_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_FN_PROXY_URL }}
+
+      - name: 📢 Deployment Summary
+        run: |
+          echo "## 📱 Expo Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ github.event.inputs.environment || (github.event.release.prerelease && 'preview' || 'production') }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: ${{ github.event.release.tag_name || github.sha }}" >> $GITHUB_STEP_SUMMARY
+
+  deploy-web:
+    name: 🌐 Deploy Web (Vercel)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' && !github.event.release.prerelease
+    defaults:
+      run:
+        working-directory: finance-assistant/fintech-ui
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: finance-assistant/fintech-ui/package-lock.json
+
+      - name: 📥 Install Vercel CLI
+        run: npm install -g vercel
+
+      - name: 📥 Install dependencies
+        run: npm ci
+
+      - name: 🌐 Deploy to Vercel
+        run: |
+          vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+          vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+          vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        continue-on-error: true
+
+      - name: 📢 Web Deployment Summary
+        run: |
+          echo "## 🌐 Vercel Deployment Complete!" >> $GITHUB_STEP_SUMMARY

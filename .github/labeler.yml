@@ -1,0 +1,35 @@
+# Label PRs based on files changed
+dependencies:
+  - package.json
+  - package-lock.json
+  - "**/package.json"
+  - "**/package-lock.json"
+
+documentation:
+  - "**/*.md"
+  - docs/**
+
+ci/cd:
+  - .github/**
+
+app:
+  - finance-assistant/fintech-ui/app/**
+  - finance-assistant/fintech-ui/components/**
+
+config:
+  - finance-assistant/fintech-ui/*.json
+  - finance-assistant/fintech-ui/*.js
+  - finance-assistant/fintech-ui/*.ts
+  - "!finance-assistant/fintech-ui/package*.json"
+
+api:
+  - finance-assistant/fintech-ui/lib/**
+  - finance-assistant/fintech-ui/api*
+
+styles:
+  - "**/*.css"
+  - "**/theme.ts"
+  - "**/constants/**"
+
+forecast:
+  - Forecast/**
