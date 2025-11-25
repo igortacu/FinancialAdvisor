@@ -10,6 +10,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CI: true
+
 jobs:
   lint:
     name: 🔍 Lint
@@ -27,7 +30,7 @@ jobs:
           node-version: '20'
 
       - name: 📥 Install dependencies
-        run: npm install
+        run: npm install --ignore-scripts
 
       - name: 🔍 Run ESLint
         run: npm run lint || true
@@ -48,7 +51,7 @@ jobs:
           node-version: '20'
 
       - name: 📥 Install dependencies
-        run: npm install
+        run: npm install --ignore-scripts
 
       - name: 📝 TypeScript Check
         run: npx tsc --noEmit || true
@@ -71,7 +74,7 @@ jobs:
           node-version: '20'
 
       - name: 📥 Install dependencies
-        run: npm install
+        run: npm install --ignore-scripts
 
       - name: 🏗️ Build Web
         run: npx expo export --platform web || echo "Build skipped - secrets not configured"
