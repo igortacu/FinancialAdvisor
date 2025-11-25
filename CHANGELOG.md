@@ -81,7 +81,7 @@
   - Future revenue projection engine
   - Advanced cash flow analysis
   - Monthly financial forecasting
-  - Balance projection system
+  - Balangitce projection system
 - New analytical tools and visualizations
 
 ### Enhanced
