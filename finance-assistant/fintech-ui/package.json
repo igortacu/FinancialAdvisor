@@ -18,7 +18,7 @@
     "build:all": "eas build --platform all"
   },
   "dependencies": {
-    "@expo/metro-config": "^54.0.8",
+    "@expo/metro-config": "^54.0.9",
     "@expo/vector-icons": "^15.0.2",
     "@miblanchard/react-native-slider": "^2.6.0",
     "@ptomasroos/react-native-multi-slider": "^2.2.2",
