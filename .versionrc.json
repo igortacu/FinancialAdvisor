@@ -1,0 +1,38 @@
+{
+  "types": [
+    { "type": "feat", "section": "✨ Features" },
+    { "type": "fix", "section": "🐛 Bug Fixes" },
+    { "type": "perf", "section": "⚡ Performance" },
+    { "type": "refactor", "section": "♻️ Refactoring" },
+    { "type": "docs", "section": "📚 Documentation" },
+    { "type": "style", "section": "💄 Styling" },
+    { "type": "test", "section": "✅ Tests" },
+    { "type": "build", "section": "📦 Build" },
+    { "type": "ci", "section": "🔧 CI/CD" },
+    { "type": "chore", "section": "🔨 Chores" },
+    { "type": "security", "section": "🔒 Security" },
+    { "type": "revert", "section": "⏪ Reverts" }
+  ],
+  "commitUrlFormat": "https://github.com/igortacu/FinancialAdvisor/commit/{{hash}}",
+  "compareUrlFormat": "https://github.com/igortacu/FinancialAdvisor/compare/{{previousTag}}...{{currentTag}}",
+  "issueUrlFormat": "https://github.com/igortacu/FinancialAdvisor/issues/{{id}}",
+  "userUrlFormat": "https://github.com/{{user}}",
+  "releaseCommitMessageFormat": "chore(release): {{currentTag}}",
+  "scripts": {
+    "prerelease": "npm run lint",
+    "prebump": "echo 'Running pre-bump checks...'",
+    "postbump": "echo 'Version bumped successfully!'",
+    "prechangelog": "echo 'Generating changelog...'",
+    "postchangelog": "echo 'Changelog updated!'",
+    "pretag": "echo 'Creating git tag...'",
+    "posttag": "echo 'Tag created!'"
+  },
+  "skip": {
+    "bump": false,
+    "changelog": false,
+    "commit": false,
+    "tag": false
+  },
+  "tagPrefix": "v",
+  "header": "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),\nand this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n"
+}
