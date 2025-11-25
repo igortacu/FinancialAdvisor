@@ -1,21 +1,26 @@
 const { getDefaultConfig } = require('expo/metro-config');
+const path = require('path');
 
-const config = getDefaultConfig(__dirname);
+// Find the project and workspace directories
+const projectRoot = __dirname;
+// The monorepo root
+const monorepoRoot = path.resolve(projectRoot, '../..');
 
-// Ensure proper platform support
-config.resolver.platforms = ['ios', 'android', 'native'];
+const config = getDefaultConfig(projectRoot);
 
-// Add server configuration
-config.server = {
-  enhanceMiddleware: (middleware) => {
-    return (req, res, next) => {
-      // Add platform header if missing
-      if (!req.headers['expo-platform'] && req.url.includes('/_expo/')) {
-        req.headers['expo-platform'] = 'ios';
-      }
-      return middleware(req, res, next);
-    };
-  },
-};
+// 1. Watch all files within the monorepo
+config.watchFolders = [monorepoRoot];
+
+// 2. Let Metro know where to resolve packages and in what order
+config.resolver.nodeModulesPaths = [
+  path.resolve(projectRoot, 'node_modules'),
+  path.resolve(monorepoRoot, 'node_modules'),
+];
+
+// 3. Force resolving nested modules from project root
+config.resolver.disableHierarchicalLookup = true;
+
+// 4. Ensure proper platform support including web
+config.resolver.platforms = ['ios', 'android', 'native', 'web'];
 
 module.exports = config;
