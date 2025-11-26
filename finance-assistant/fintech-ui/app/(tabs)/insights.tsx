@@ -168,7 +168,10 @@ export default function Insights() {
 
       {/* Portfolio Growth */}
       <Animated.View entering={FadeInUp.duration(380)}>
-        <MonthlyMix stocks={Object.values(stockMap).filter((s): s is StockCardData => !!s)} />
+        <MonthlyMix 
+          stocks={Object.values(stockMap).filter((s): s is StockCardData => !!s)} 
+          isLoading={loadingMarket}
+        />
       </Animated.View>
     </ScrollView>
   );

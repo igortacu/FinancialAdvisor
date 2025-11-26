@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import CompactChart from "@/components/CompactChart";
 import { VictoryChart, VictoryAxis, VictoryLine, VictoryContainer } from "@/lib/charts";
 import Card from "@/components/Card";
@@ -7,9 +7,10 @@ import { StockCardData } from "./types";
 
 type Props = {
   stocks: StockCardData[];
+  isLoading?: boolean;
 };
 
-function PortfolioGrowth({ stocks }: Props) {
+function PortfolioGrowth({ stocks, isLoading }: Props) {
   // Filter out stocks with no series data
   const validStocks = React.useMemo(() => stocks.filter(s => s.series && s.series.length > 0), [stocks]);
 
@@ -28,6 +29,18 @@ function PortfolioGrowth({ stocks }: Props) {
   }, [validStocks]);
 
   const colors = ["#FFB020", "#A855F7", "#1F2937"]; // Matches the cards
+
+  if (isLoading) {
+    return (
+      <Card>
+        <Text style={s.h1}>Portfolio Growth</Text>
+        <View style={s.center}>
+          <ActivityIndicator size="small" color="#246BFD" />
+          <Text style={s.loadingText}>Loading market data...</Text>
+        </View>
+      </Card>
+    );
+  }
 
   if (validStocks.length === 0) {
     return (
@@ -108,4 +121,6 @@ const s = StyleSheet.create({
   legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: 12, color: "#4B5563", fontWeight: "600" },
+  center: { alignItems: "center", justifyContent: "center", padding: 20, gap: 8 },
+  loadingText: { fontSize: 13, color: "#6B7280" },
 });

@@ -20,18 +20,6 @@ export const mockedNews: Record<SymbolKey, Headline[]> = {
   NFLX: [{ title: "Netflix subscriber growth accelerates with new content strategy.", url: "https://www.variety.com/2025/09/18/netflix-subscriber-growth.html" }],
 };
 
-export const fallbackMonthly = [
-  { month: "Jan", needs: 1200, wants: 700, savings: 400 },
-  { month: "Feb", needs: 1500, wants: 600, savings: 500 },
-  { month: "Mar", needs: 1300, wants: 800, savings: 450 },
-  { month: "Apr", needs: 1400, wants: 750, savings: 600 },
-  { month: "May", needs: 1600, wants: 900, savings: 700 },
-  { month: "Jun", needs: 1700, wants: 800, savings: 600 },
-  { month: "Jul", needs: 1500, wants: 700, savings: 500 },
-  { month: "Aug", needs: 1800, wants: 1000, savings: 800 },
-  { month: "Sep", needs: 1600, wants: 900, savings: 700 },
-];
-
 export async function fetchMarketData(
   symbols: SymbolKey[],
   signal?: AbortSignal
