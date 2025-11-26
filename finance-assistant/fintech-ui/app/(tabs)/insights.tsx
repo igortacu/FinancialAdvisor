@@ -5,7 +5,7 @@ import Animated, { FadeInUp } from "react-native-reanimated";
 import Card from "@/components/Card";
 import { supabase } from "../../api";
 import { useAuth } from "@/store/auth";
-import { fetchMarketData, getNewsForSymbol, fallbackMonthly, Headline } from "@/lib/insightsApi";
+import { fetchMarketData, getNewsForSymbol, Headline } from "@/lib/insightsApi";
 import StockSelector from "@/components/insights/StockSelector";
 import StockCard from "@/components/insights/StockCard";
 import MonthlyMix from "@/components/insights/MonthlyMix";
@@ -166,9 +166,9 @@ export default function Insights() {
         )}
       </Animated.View>
 
-      {/* Monthly Mix */}
+      {/* Portfolio Growth */}
       <Animated.View entering={FadeInUp.duration(380)}>
-        <MonthlyMix data={fallbackMonthly} />
+        <MonthlyMix stocks={Object.values(stockMap).filter((s): s is StockCardData => !!s)} />
       </Animated.View>
     </ScrollView>
   );

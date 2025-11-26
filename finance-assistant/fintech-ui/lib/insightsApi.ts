@@ -37,8 +37,8 @@ export async function fetchMarketData(
   signal?: AbortSignal
 ): Promise<Partial<Record<SymbolKey, StockCardData>>> {
   if (!FINNHUB_KEY) {
-    console.warn("FINNHUB key missing — set EXPO_PUBLIC_FINNHUB_KEY to enable insights");
-    return {};
+    console.warn("FINNHUB key missing — using mock data");
+    return generateMockData(symbols);
   }
 
   // 1. Fetch SPY candles for Alpha Lens (needed for all stocks)
@@ -123,4 +123,32 @@ export async function fetchMarketData(
 
 export function getNewsForSymbol(symbol: SymbolKey): Headline[] {
   return mockedNews[symbol] || [];
+}
+
+function generateMockData(symbols: SymbolKey[]): Partial<Record<SymbolKey, StockCardData>> {
+  const out: Partial<Record<SymbolKey, StockCardData>> = {};
+  
+  symbols.forEach(s => {
+    const basePrice = Math.random() * 100 + 50;
+    const mockSeries: SparkPoint[] = Array.from({ length: 30 }, (_, i) => ({
+      x: new Date(Date.now() - (29 - i) * 86400000),
+      y: basePrice + Math.sin(i / 3) * 10 + (Math.random() * 5)
+    }));
+
+    out[s] = {
+      symbol: s,
+      price: mockSeries[mockSeries.length - 1].y,
+      changePct: (Math.random() * 4) - 2,
+      series: mockSeries,
+      stats: {
+        trendScore: Math.floor(Math.random() * 5) + 1,
+        volPercentile: Math.floor(Math.random() * 100),
+        breakout: Math.random() > 0.5 ? "New High" : "Range",
+        beta: Number((Math.random() * 1.5 + 0.5).toFixed(2)),
+        idioTodayPct: Number(((Math.random() * 4) - 2).toFixed(2))
+      }
+    };
+  });
+
+  return out;
 }
