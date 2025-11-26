@@ -51,14 +51,15 @@ export async function fetchMarketData(
 
   const out: Partial<Record<SymbolKey, StockCardData>> = {};
 
-  for (const s of symbols) {
-    if (signal?.aborted) break;
+  // Fetch all symbols in parallel
+  await Promise.all(symbols.map(async (s) => {
+    if (signal?.aborted) return;
 
     // Check cache
     const cached = marketCache[s];
     if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
       out[s] = cached.data;
-      continue;
+      return;
     }
 
     try {
@@ -101,10 +102,7 @@ export async function fetchMarketData(
       
       out[s] = data;
     }
-
-    // Pace requests
-    await new Promise((r) => setTimeout(r, 220));
-  }
+  }));
 
   return out;
 }
