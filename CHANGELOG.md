@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2025-11-27
+
+### ✨ Features
+
+#### Forecast Integration - [PR #104](https://github.com/igortacu/FinancialAdvisor/pull/104)
+- **Python ML Backend**: Integrated a Python-based machine learning model to forecast user spending
+- **New API Service**: Added a FastAPI server (`Forecast/ml_api.py`) for serving predictions
+- **Supabase Integration**: Added support for fetching training data from Supabase
+- **Analytics Visualization**: Added "Cash Flow Forecast" chart to Analytics screen
+- **Dynamic Time Periods**: Added support for 1M, 3M, 6M, and 1Y forecast views
+
 ## [1.1.0] - 2025-11-25
 
 ### ✨ Features
