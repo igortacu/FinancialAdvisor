@@ -34,6 +34,8 @@ import {
 } from "../../lib/charts";
 import { AnalyticsService } from "@/lib/analytics";
 import { useRouter } from "expo-router";
+import { useForecast } from "@/hooks/useForecast";
+import { useAuth } from "@/store/auth";
 
 // ---------- helpers ----------
 function formatMoney(val: number, currency: string) {
@@ -455,6 +457,26 @@ export default function Analytics() {
   // Budgets and carryover
   const [budgets, setBudgets] = React.useState({ needs: 1600, wants: 900, savings: 600 });
   const [carryover, setCarryover] = React.useState(true);
+
+  // Forecast Integration
+  const { user } = useAuth();
+  const { data: forecastApiData, loading: forecastLoading } = useForecast(user?.id, forecastPeriod === "30" ? 6 : 12);
+
+  // Transform API forecast data for chart
+  const forecastChartData = React.useMemo(() => {
+    if (!forecastApiData?.values) return forecastPeriod === "30" ? forecast30d : forecast90d;
+    
+    // Map the values to days (assuming monthly points for now, but we can interpolate)
+    // For demo, we'll just map the 6-12 points to the period
+    const values = forecastApiData.values;
+    const days = forecastPeriod === "30" ? 30 : 90;
+    const step = days / (values.length - 1);
+    
+    return values.map((v, i) => ({
+      day: Math.round(i * step),
+      y: v * 10 // Scale up for demo visibility if needed, or assume API returns correct scale
+    }));
+  }, [forecastApiData, forecastPeriod]);
 
   const filteredMonthlyData =
     selectedMonth === "All"
@@ -1088,7 +1110,7 @@ export default function Analytics() {
       <View style={s.forecastKPI}>
         <Text style={s.forecastLabel}>Projected Balance</Text>
         <Text style={s.forecastValue}>
-          {forecastPeriod === "30" ? "$2,100" : "$2,900"}
+          {forecastLoading ? "..." : (forecastPeriod === "30" ? "$2,100" : "$2,900")}
         </Text>
         <Text style={s.forecastDelta}>
           {forecastPeriod === "30" ? "+31%" : "+81%"}
@@ -1108,6 +1130,9 @@ export default function Analytics() {
 
     {/* Chart with Income & Expense Events */}
     <View style={s.chartContainer}>
+      {forecastLoading ? (
+        <Text style={{color: '#6B7280'}}>Loading forecast...</Text>
+      ) : (
       <VictoryChart
         width={forecastChartWidth}
         height={250}
@@ -1150,7 +1175,7 @@ export default function Analytics() {
 
         {/* Projected Balance Line (fix dataset + map x) */}
         <VictoryLine
-          data={forecastPeriod === "30" ? forecast30d : forecast90d}
+          data={forecastChartData}
           x="day"
           y="y"
           style={{
@@ -1164,7 +1189,7 @@ export default function Analytics() {
 
         {/* Balance Data Points (map x/y) */}
         <VictoryScatter
-          data={forecastPeriod === "30" ? forecast30d : forecast90d}
+          data={forecastChartData}
           x="day"
           y="y"
           size={4}
@@ -1243,6 +1268,7 @@ export default function Analytics() {
           labelComponent={<VictoryLabel dy={10} style={{ fontSize: 8, fill: "#EF4444", fontWeight: "700" }} />}
         />
       </VictoryChart>
+      )}
     </View>
 
     {/* Enhanced Legend */}
