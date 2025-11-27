@@ -28,7 +28,7 @@ export type ForecastResponse = {
 const BASE =
   process.env.EXPO_PUBLIC_ML_API_URL?.replace(/\/$/, "") ||
   process.env.ML_API_URL?.replace(/\/$/, "") ||
-  "http://localhost:8090";
+  "http://localhost:8091";
 
 async function doJson<T>(path: string, init?: RequestInit): Promise<T> {
   const ctrl = new AbortController();
