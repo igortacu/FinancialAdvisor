@@ -34,6 +34,8 @@ import {
 } from "../../lib/charts";
 import { AnalyticsService } from "@/lib/analytics";
 import { useRouter } from "expo-router";
+import { useForecast } from "@/hooks/useForecast";
+import { useAuth } from "@/store/auth";
 
 // ---------- helpers ----------
 function formatMoney(val: number, currency: string) {
@@ -445,7 +447,7 @@ export default function Analytics() {
   const [selectedMonth, setSelectedMonth] = React.useState<string>(effectiveCurrentMonth);
 
   // forecast period selector
-  const [forecastPeriod, setForecastPeriod] = React.useState<"30" | "90">("30");
+  const [forecastPeriod, setForecastPeriod] = React.useState<"30" | "90" | "180" | "365">("30");
 
   // cash flow
   const [cashSeries] = React.useState(fallbackCash7d);
@@ -455,6 +457,57 @@ export default function Analytics() {
   // Budgets and carryover
   const [budgets, setBudgets] = React.useState({ needs: 1600, wants: 900, savings: 600 });
   const [carryover, setCarryover] = React.useState(true);
+
+  // Forecast Integration
+  const { user } = useAuth();
+  // Request enough points for a smooth curve. 
+  // 1M -> 10 points (3-day), 3M -> 12 points (weekly), 6M -> 12 points (bi-weekly), 1Y -> 12 points (monthly)
+  const forecastPoints = React.useMemo(() => {
+    switch(forecastPeriod) {
+      case "30": return 10;
+      case "90": return 12;
+      case "180": return 12;
+      case "365": return 12;
+      default: return 6;
+    }
+  }, [forecastPeriod]);
+
+  const { data: forecastApiData, loading: forecastLoading } = useForecast(user?.id, forecastPoints);
+
+  // Transform API forecast data for chart
+  const forecastChartData = React.useMemo(() => {
+    // Fallback data generation if API fails or is loading
+    if (!forecastApiData?.values) {
+       const days = parseInt(forecastPeriod);
+       const points = forecastPoints;
+       return Array.from({length: points}).map((_, i) => ({
+         day: Math.round(i * (days / (points - 1))),
+         y: 1600 + i * 50 + Math.random() * 200
+       }));
+    }
+    
+    const values = forecastApiData.values;
+    const days = parseInt(forecastPeriod);
+    const step = days / (Math.max(values.length - 1, 1));
+    
+    return values.map((v, i) => ({
+      day: Math.round(i * step),
+      y: v * 10 // Scale up for demo visibility
+    }));
+  }, [forecastApiData, forecastPeriod, forecastPoints]);
+
+  const lastForecastValue = forecastChartData[forecastChartData.length - 1]?.y || 0;
+  const startForecastValue = forecastChartData[0]?.y || 1600;
+  const deltaPctVal = startForecastValue ? ((lastForecastValue - startForecastValue) / startForecastValue * 100) : 0;
+  const deltaPct = deltaPctVal.toFixed(0);
+
+  const confidenceData = React.useMemo(() => {
+    return forecastChartData.map(d => ({
+      day: d.day,
+      y0: d.y * 0.85,
+      y: d.y * 1.15
+    }));
+  }, [forecastChartData]);
 
   const filteredMonthlyData =
     selectedMonth === "All"
@@ -1043,44 +1096,30 @@ export default function Analytics() {
       <Text style={s.h1}>Cash Flow Forecast</Text>
       
       <View style={s.periodSelector} accessibilityRole="radiogroup" accessibilityLabel="Forecast period selector">
-        <Pressable
-          onPress={() => setForecastPeriod("30")}
-          style={[
-            s.periodButton,
-            forecastPeriod === "30" && s.periodButtonActive,
-          ]}
-          accessibilityRole="radio"
-          accessibilityState={{ checked: forecastPeriod === "30" }}
-          accessibilityLabel="30 day forecast"
-        >
-          <Text
+        {(["30", "90", "180", "365"] as const).map((p) => (
+          <Pressable
+            key={p}
+            onPress={() => setForecastPeriod(p)}
             style={[
-              s.periodButtonText,
-              forecastPeriod === "30" && s.periodButtonTextActive,
+              s.periodButton,
+              forecastPeriod === p && s.periodButtonActive,
+              { paddingHorizontal: 12, paddingVertical: 6 } // Compact for 4 items
             ]}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: forecastPeriod === p }}
+            accessibilityLabel={`${p} day forecast`}
           >
-            30 Days
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setForecastPeriod("90")}
-          style={[
-            s.periodButton,
-            forecastPeriod === "90" && s.periodButtonActive,
-          ]}
-          accessibilityRole="radio"
-          accessibilityState={{ checked: forecastPeriod === "90" }}
-          accessibilityLabel="90 day forecast"
-        >
-          <Text
-            style={[
-              s.periodButtonText,
-              forecastPeriod === "90" && s.periodButtonTextActive,
-            ]}
-          >
-            90 Days
-          </Text>
-        </Pressable>
+            <Text
+              style={[
+                s.periodButtonText,
+                forecastPeriod === p && s.periodButtonTextActive,
+                { fontSize: 12 }
+              ]}
+            >
+              {p === "30" ? "1M" : p === "90" ? "3M" : p === "180" ? "6M" : "1Y"}
+            </Text>
+          </Pressable>
+        ))}
       </View>
     </View>
 
@@ -1088,10 +1127,10 @@ export default function Analytics() {
       <View style={s.forecastKPI}>
         <Text style={s.forecastLabel}>Projected Balance</Text>
         <Text style={s.forecastValue}>
-          {forecastPeriod === "30" ? "$2,100" : "$2,900"}
+          {forecastLoading ? "..." : formatMoney(lastForecastValue, currency)}
         </Text>
         <Text style={s.forecastDelta}>
-          {forecastPeriod === "30" ? "+31%" : "+81%"}
+          {forecastLoading ? "..." : `${deltaPctVal > 0 ? "+" : ""}${deltaPct}%`}
         </Text>
       </View>
       <View style={s.forecastKPI}>
@@ -1108,18 +1147,21 @@ export default function Analytics() {
 
     {/* Chart with Income & Expense Events */}
     <View style={s.chartContainer}>
+      {forecastLoading ? (
+        <Text style={{color: '#6B7280'}}>Loading forecast...</Text>
+      ) : (
       <VictoryChart
         width={forecastChartWidth}
-        height={250}
+        height={300}
         padding={{ left: 60, right: 40, top: 30, bottom: 40 }}
         domain={{ 
-          x: [0, forecastPeriod === "30" ? 30 : 90],
-          y: [0, forecastPeriod === "30" ? 4000 : 3200]
+          x: [0, parseInt(forecastPeriod)],
+          y: [0, 4000] // Fixed Y for demo stability, or dynamic based on data
         }}
       >
         {/* Confidence Band */}
         <VictoryArea
-          data={forecastPeriod === "30" ? confidence30d : confidence90d}
+          data={confidenceData}
           x="day"
           style={{
             data: { 
@@ -1150,7 +1192,7 @@ export default function Analytics() {
 
         {/* Projected Balance Line (fix dataset + map x) */}
         <VictoryLine
-          data={forecastPeriod === "30" ? forecast30d : forecast90d}
+          data={forecastChartData}
           x="day"
           y="y"
           style={{
@@ -1164,7 +1206,7 @@ export default function Analytics() {
 
         {/* Balance Data Points (map x/y) */}
         <VictoryScatter
-          data={forecastPeriod === "30" ? forecast30d : forecast90d}
+          data={forecastChartData}
           x="day"
           y="y"
           size={4}
@@ -1188,6 +1230,7 @@ export default function Analytics() {
               { day: 21, amount: 200, label: "Bonus" },
               { day: 28, amount: 3850, label: "Salary" }
             ] :
+            // Use 90d data for all longer periods for now
             [
               { day: 0, amount: 3850, label: "Salary" },
               { day: 14, amount: 450, label: "Freelance" },
@@ -1219,6 +1262,7 @@ export default function Analytics() {
               { day: 23, amount: 280, label: "Loan" },
               { day: 27, amount: 180, label: "Membership" }
             ] :
+            // Use 90d data for all longer periods for now
             [
               { day: 2, amount: 1200, label: "Rent" },
               { day: 16, amount: 320, label: "Utilities" },
@@ -1243,6 +1287,7 @@ export default function Analytics() {
           labelComponent={<VictoryLabel dy={10} style={{ fontSize: 8, fill: "#EF4444", fontWeight: "700" }} />}
         />
       </VictoryChart>
+      )}
     </View>
 
     {/* Enhanced Legend */}

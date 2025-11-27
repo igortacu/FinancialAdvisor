@@ -8,14 +8,22 @@ UUID_1 = "698841bd-189c-4407-b582-9d5fa2689336"
 UUID_2 = "5c8251ce-1fe3-4225-97e8-33ec05f85927"
 
 def load_series(series_path: str) -> pd.DataFrame:
-    df = pd.read_csv(series_path, engine='python')
-    if 'date' in df.columns:
-        df['date'] = pd.to_datetime(
-    df['date'],
-    format="%d/%m/%Y %H:%M",
-    dayfirst=True,
-    errors="coerce",
-)
+    if series_path == "SUPABASE":
+        from supabase_client import fetch_series_from_supabase
+        df = fetch_series_from_supabase()
+        # Supabase returns ISO strings usually, so we need to parse them
+        if 'date' in df.columns:
+             df['date'] = pd.to_datetime(df['date'])
+    else:
+        df = pd.read_csv(series_path, engine='python')
+        if 'date' in df.columns:
+            df['date'] = pd.to_datetime(
+                df['date'],
+                format="%d/%m/%Y %H:%M",
+                dayfirst=True,
+                errors="coerce",
+            )
+
     required = {'user_id','tx_id','date','current_budget'}
     missing = required - set(df.columns)
     if missing:
