@@ -19,7 +19,6 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
-import { useLocalSearchParams } from "expo-router";
 
 import Card from "@/components/Card";
 import CompactChart from "@/components/CompactChart";
@@ -27,7 +26,6 @@ import { VictoryChart, VictoryLine, VictoryAxis, ChartsReady } from "@/lib/chart
 import { analyzeTransaction, getForecast } from "@/lib/mlApi";
 import { MOCK_RECEIPT, type ParsedReceipt } from "@/lib/receipt-mock";
 import { supabase } from "../../api";
-import { AnalyticsService } from "@/lib/analytics";
 // import { useAuth } from "@/store/auth"; // not used for userId now
 
 /** ========= DB bindings (edit to match table/columns) ========= */
@@ -115,6 +113,24 @@ const CATEGORIES: Category[] = [
   "Shopping",
 ];
 
+const CLASSIFY_API_URL = "http://localhost:8000/classify";
+
+async function classifyTransaction(text: string): Promise<string | null> {
+  try {
+    const res = await fetch(CLASSIFY_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.category;
+  } catch (e) {
+    console.warn("Classification API failed, falling back to local guess", e);
+    return null;
+  }
+}
+
 // Simple fallback series generator for demo (values between 50..300)
 function genFallbackForecast(n = 6) {
   const clamp = (v: number) => Math.max(50, Math.min(300, v));
@@ -131,7 +147,6 @@ function genFallbackForecast(n = 6) {
 /* ============== Component ============== */
 export default function Transactions() {
   const insets = useSafeAreaInsets();
-  const { category: initialCategory } = useLocalSearchParams<{ category: string }>();
   // const { user } = useAuth(); // avoid relying on store shape for id
   const [userId, setUserId] = React.useState<string | null>(null);
 
@@ -165,13 +180,6 @@ export default function Transactions() {
 
   // ---- filters
   const [activeCat, setActiveCat] = React.useState<Category | "ALL">("ALL");
-
-  React.useEffect(() => {
-    if (initialCategory && (CATEGORIES.includes(initialCategory as any) || initialCategory === "ALL")) {
-      setActiveCat(initialCategory as any);
-    }
-  }, [initialCategory]);
-
   const [month, setMonth] = React.useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -420,6 +428,9 @@ export default function Transactions() {
       const merchant = normalize(parsed.merchant);
       const total = Number(totalOf(parsed).toFixed(2)); // positive
 
+      // Try AI classification
+      const aiCategory = await classifyTransaction(merchant);
+
       // Call ML API to analyze this transaction for category/risk/advice
       let mlCat: string | null = null;
       let ml: any = null;
@@ -446,7 +457,7 @@ export default function Transactions() {
         [COLS.income]: 0,
         [COLS.merchant]: merchant,
         [COLS.name]: merchant,
-        [COLS.category]: mlCat ?? guessCategory(merchant),
+        [COLS.category]: aiCategory ?? mlCat ?? guessCategory(merchant),
         [COLS.meta]: { ...(parsed as any), ml },
       };
 
@@ -465,14 +476,6 @@ export default function Transactions() {
       }
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      
-      AnalyticsService.track('AddTransaction', {
-        amount: Math.abs(total),
-        currency: parsed.currency || "MDL",
-        category: mlCat ?? guessCategory(merchant),
-        method: 'scan'
-      });
-
       if (ml?.advice?.length) {
         try {
           Alert.alert("AI Advice", ml.advice.join("\n"));
@@ -492,14 +495,33 @@ export default function Transactions() {
       Alert.alert("Sign in required", "Log in to add a manual entry.");
       return;
     }
-    const total = 123.45;
+
+    // Randomize manual entry for demo variety
+    const SAMPLES = [
+      { m: "Kaufland", a: 450.00 },
+      { m: "Lukoil", a: 800.00 },
+      { m: "Netflix", a: 199.00 },
+      { m: "Zara", a: 1200.00 },
+      { m: "Farmacia Familia", a: 340.50 },
+      { m: "Uber", a: 75.00 },
+      { m: "Linella", a: 230.00 },
+      { m: "Orange", a: 150.00 },
+    ];
+    const pick = SAMPLES[Math.floor(Math.random() * SAMPLES.length)];
+    const total = pick.a;
+    const merchantName = pick.m;
+
     // For demo, feed a manual example through ML
     let mlCat: string | null = null;
     let ml: any = null;
+    
+    // Try AI classification
+    const aiCategory = await classifyTransaction(merchantName);
+
     try {
       const resp = await analyzeTransaction({
         user_id: userId,
-        merchant: "Manual Entry",
+        merchant: merchantName,
         amount: -total,
         currency: "MDL",
         meta: { source: "manual" },
@@ -517,9 +539,9 @@ export default function Transactions() {
       [COLS.net]: -total,
       [COLS.expense]: total,
       [COLS.income]: 0,
-      [COLS.merchant]: null,
-      [COLS.name]: "Manual Entry",
-      [COLS.category]: mlCat ?? "General",
+      [COLS.merchant]: merchantName,
+      [COLS.name]: merchantName,
+      [COLS.category]: aiCategory ?? mlCat ?? guessCategory(merchantName),
       [COLS.meta]: ml ? { ml } : null,
     };
 
@@ -536,14 +558,6 @@ export default function Transactions() {
     }
 
     setList((p) => [mapDBToUI(data), ...p]);
-
-    AnalyticsService.track('AddTransaction', {
-      amount: Math.abs(total),
-      currency: "MDL",
-      category: mlCat ?? "General",
-      method: 'manual_demo'
-    });
-
     if (ml?.advice?.length) {
       try {
         Alert.alert("AI Advice", ml.advice.join("\n"));

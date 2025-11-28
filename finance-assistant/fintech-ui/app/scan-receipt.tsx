@@ -22,6 +22,24 @@ import { MOCK_RECEIPT, ParsedReceipt } from "@/lib/receipt-mock";
 
 const USE_MOCK = true; // ← keep true for now
 
+const CLASSIFY_API_URL = "http://localhost:8000/classify";
+
+async function classifyTransaction(text: string): Promise<string | null> {
+  try {
+    const res = await fetch(CLASSIFY_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.category;
+  } catch (e) {
+    console.warn("Classification API failed, falling back to local guess", e);
+    return null;
+  }
+}
+
 const normalize = (s: string) => s.replace(/\s{2,}/g, " ").trim();
 const guessCategory = (merchant: string) => {
   const m = merchant.toUpperCase();
@@ -99,15 +117,18 @@ export default function ScanReceipt() {
     }
   }
 
-  function addToTransactions() {
+  async function addToTransactions() {
     if (!parsed) return;
     const merchant = normalize(parsed.merchant);
+    
+    const aiCategory = await classifyTransaction(merchant);
+    
     const tx = {
       id: String(Date.now()),
       name: merchant, // ← your store expects name
       date: new Date().toISOString(),
       amount: -Number(totalOf(parsed).toFixed(2)), // expense = negative
-      category: guessCategory(merchant),
+      category: aiCategory ?? guessCategory(merchant),
       meta: parsed, // keep full receipt in meta
     };
     addTx(tx);
