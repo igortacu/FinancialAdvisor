@@ -2,14 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
 ---
 
-## [1.2.0] - 2025-11-27
+## November 28, 2025
 
-### ✨ Features
+We released [v1.2.0](https://github.com/igortacu/FinancialAdvisor/releases/tag/v1.2.0) of Financial Advisor. This includes the following fixes and improvements:
+
+### Features
+
+#### Transaction Classification - [PR #106](https://github.com/igortacu/FinancialAdvisor/pull/106)
+- **ML Pipeline Integration**: Implemented the classification model into the data processing pipeline for real-time transaction analysis
+- **Smart Categorization**: Added regex-based merchant categorization for Groceries, Fuel, Utilities, and more
+- **Risk Assessment**: Introduced heuristic-based risk analysis to flag high-value or unusual transactions
+- **Actionable Advice**: System now provides contextual financial advice based on spending patterns
+- **LLM Weights**: Added new weights for the Large Language Model to improve categorization accuracy
+- **Documentation**: Updated documentation for the classification system
 
 #### Forecast Integration - [PR #104](https://github.com/igortacu/FinancialAdvisor/pull/104)
 - **Python ML Backend**: Integrated a Python-based machine learning model to forecast user spending
@@ -18,9 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Analytics Visualization**: Added "Cash Flow Forecast" chart to Analytics screen
 - **Dynamic Time Periods**: Added support for 1M, 3M, 6M, and 1Y forecast views
 
-## [1.1.0] - 2025-11-25
+---
 
-### ✨ Features
+## November 25, 2025
+
+We released [v1.1.0](https://github.com/igortacu/FinancialAdvisor/releases/tag/v1.1.0) of Financial Advisor. This includes the following fixes and improvements:
+
+### Features
 
 #### Investments Page Overhaul - [PR #73](https://github.com/igortacu/FinancialAdvisor/pull/73)
 - **Multi-Brokerage Account Selection**: Added support for connecting to multiple brokerage accounts
@@ -51,7 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Monthly Cash Flow**: Current month cash flow visualization
 - **Editable Analytics**: User-editable monthly spending data
 
-### 🐛 Bug Fixes
+### Bug Fixes
 
 - Fixed NaN errors in Victory chart `cornerRadius` and `easing` props
 - Added mock data fallback when Yahoo Finance blocks requests
@@ -60,21 +71,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replaced `any` types with proper TypeScript definitions
 - Removed unused DCAPlan type and MOCK_DCA variable
 
-### 🔒 Security
+### Security
 
 - **Dependency Updates** - [PR #68](https://github.com/igortacu/FinancialAdvisor/pull/68), [PR #67](https://github.com/igortacu/FinancialAdvisor/pull/67)
   - Bumped `glob` to fix security vulnerability
   - Bumped `js-yaml` to latest secure version
   - Bumped `tar` package ([PR #62](https://github.com/igortacu/FinancialAdvisor/pull/62))
 
-### 🔧 Chores
+### Chores
 
 - **Disabled Registration** - [PR #66](https://github.com/igortacu/FinancialAdvisor/pull/66): Temporarily disabled new user registration
 - **Localization Template** - [PR #61](https://github.com/igortacu/FinancialAdvisor/pull/61): Added currency localization template
 - **Model Integration** - [PR #65](https://github.com/igortacu/FinancialAdvisor/pull/65): FastAPI model server setup
 - **Changelog & Contributions** - [PR #64](https://github.com/igortacu/FinancialAdvisor/pull/64): Added contribution guidelines
 
-### 📚 Documentation
+### Documentation
 
 - Added submission details for Toderita Loredana
 - Fixed mobile opening issues
@@ -82,16 +93,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.0.1] - 2025-11-01
+## November 1, 2025
 
-### 🐛 Bug Fixes
+We released [v1.0.1](https://github.com/igortacu/FinancialAdvisor/releases/tag/v1.0.1) of Financial Advisor. This includes the following fixes and improvements:
+
+### Bug Fixes
 
 - **Registration Alert** - [PR #63](https://github.com/igortacu/FinancialAdvisor/pull/63): Fixed `handleRegistration()` alert to work on web and mobile
 - **Authentication Updates**: Improved commit handling for auth flow
 
 ---
 
-## [1.0.0] - 2025-10-28
+## October 28, 2025
+
+We released [v1.0.0](https://github.com/igortacu/FinancialAdvisor/releases/tag/v1.0.0) of Financial Advisor. This includes the following fixes and improvements:
+
 ### Added
 - Biometric authentication (Face ID/Touch ID) integration
 - Complete profile management system with editable fields
@@ -110,7 +126,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced documentation organization
 - Optimized project root structure
 
-## [0.9.0] - 2025-10-27
+---
+
+## October 27, 2025
+
+We released [v0.9.0](https://github.com/igortacu/FinancialAdvisor/releases/tag/v0.9.0) of Financial Advisor. This includes the following fixes and improvements:
+
 ### Added
 - Dynamic budget management features - [PR #59](https://github.com/igortacu/FinancialAdvisor/pull/59):
   - Editable monthly budget allocations
@@ -125,7 +146,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced user interface for budget management
 - Upgraded profile page interactions
 
-## [0.8.0] - 2025-10-26
+---
+
+## October 26, 2025
+
+We released [v0.8.0](https://github.com/igortacu/FinancialAdvisor/releases/tag/v0.8.0) of Financial Advisor. This includes the following fixes and improvements:
+
 ### Added
 - New authentication system features - [PR #57](https://github.com/igortacu/FinancialAdvisor/pull/57)
 - Enhanced profile management capabilities
@@ -139,7 +165,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved authentication flow
 - Enhanced user experience patterns
 
-## [0.7.0] - 2025-10-24
+---
+
+## October 24, 2025
+
+We released [v0.7.0](https://github.com/igortacu/FinancialAdvisor/releases/tag/v0.7.0) of Financial Advisor. This includes the following fixes and improvements:
+
 ### Added
 - Comprehensive dark mode implementation
 - New profile features:
@@ -167,13 +198,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated dependency management
 - Improved asset handling
 
-## [0.6.0] - 2025-10-22
+---
+
+## October 22, 2025
+
+We released [v0.6.0](https://github.com/igortacu/FinancialAdvisor/releases/tag/v0.6.0) of Financial Advisor. This includes the following fixes and improvements:
+
 ### Added
 - Financial Analysis Features - [PR #50](https://github.com/igortacu/FinancialAdvisor/pull/50):
   - Future revenue projection engine
   - Advanced cash flow analysis
   - Monthly financial forecasting
-  - Balangitce projection system
+  - Balance projection system
 - New analytical tools and visualizations
 
 ### Fixed
@@ -184,7 +220,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Data visualization components
 - User interaction with financial data
 
-## [0.5.0] - 2025-10-20
+---
+
+## October 20, 2025
+
+We released [v0.5.0](https://github.com/igortacu/FinancialAdvisor/releases/tag/v0.5.0) of Financial Advisor. This includes the following fixes and improvements:
+
 ### Added
 - Robust user authentication system
 - Secure database integration
@@ -195,7 +236,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Database connectivity
 - User data persistence
 
-## [0.4.0] - 2025-10-02
+---
+
+## October 2, 2025
+
+We released [v0.4.0](https://github.com/igortacu/FinancialAdvisor/releases/tag/v0.4.0) of Financial Advisor. This includes the following fixes and improvements:
+
 ### Added
 - Comprehensive architecture documentation
 - Project structure definition
@@ -211,55 +257,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial project setup
 - Basic development workflow
 - Documentation framework
-- **Team Number**: 3
-- **Project Name**: Financial Advisor
-- **Repository**: [https://github.com/igortacu/FinancialAdvisor](https://github.com/igortacu/FinancialAdvisor)
-
-### Team Members
-- Igor Tacu - FAF-242
-- Toderita Loredana - FAF-241
-- Pancenco Ina - FAF-242
-- Temciuc Adelina - FAF-242
-- Rusnac Nikita - FAF-242
-
----
-
-## Pull Requests (November 2025)
-
-| PR | Title | Type | Date |
-|----|-------|------|------|
-| [#73](https://github.com/igortacu/FinancialAdvisor/pull/73) | Investments Page Fix | feat | 2025-11-25 |
-| [#72](https://github.com/igortacu/FinancialAdvisor/pull/72) | Settings Page Fix | fix | 2025-11-20 |
-| [#71](https://github.com/igortacu/FinancialAdvisor/pull/71) | Login Page Auth Fix | fix | 2025-11-18 |
-| [#70](https://github.com/igortacu/FinancialAdvisor/pull/70) | Analytics Page Improvements | feat | 2025-11-15 |
-| [#69](https://github.com/igortacu/FinancialAdvisor/pull/69) | Ina Tasks | feat | 2025-11-12 |
-| [#68](https://github.com/igortacu/FinancialAdvisor/pull/68) | Bump glob | security | 2025-11-10 |
-| [#67](https://github.com/igortacu/FinancialAdvisor/pull/67) | Bump js-yaml | security | 2025-11-08 |
-| [#66](https://github.com/igortacu/FinancialAdvisor/pull/66) | Disable Registration | chore | 2025-11-06 |
-| [#65](https://github.com/igortacu/FinancialAdvisor/pull/65) | Model | feat | 2025-11-05 |
-| [#64](https://github.com/igortacu/FinancialAdvisor/pull/64) | Adding Changelog | docs | 2025-11-04 |
-| [#63](https://github.com/igortacu/FinancialAdvisor/pull/63) | Authentication Updating | fix | 2025-11-02 |
-| [#62](https://github.com/igortacu/FinancialAdvisor/pull/62) | Bump tar | security | 2025-11-01 |
-
----
-
-## Pull Requests (October 2025)
-
-| PR | Title | Type | Date |
-|----|-------|------|------|
-| [#61](https://github.com/igortacu/FinancialAdvisor/pull/61) | Currency | feat | 2025-10-30 |
-| [#60](https://github.com/igortacu/FinancialAdvisor/pull/60) | Organization fixes | fix | 2025-10-28 |
-| [#59](https://github.com/igortacu/FinancialAdvisor/pull/59) | Budgets | feat | 2025-10-27 |
-| [#58](https://github.com/igortacu/FinancialAdvisor/pull/58) | Auth/profile | feat | 2025-10-27 |
-| [#57](https://github.com/igortacu/FinancialAdvisor/pull/57) | Loredana tasks before midterm | feat | 2025-10-26 |
-| [#51](https://github.com/igortacu/FinancialAdvisor/pull/51) | Env | chore | 2025-10-24 |
-| [#50](https://github.com/igortacu/FinancialAdvisor/pull/50) | Analytics | feat | 2025-10-22 |
-| [#49](https://github.com/igortacu/FinancialAdvisor/pull/49) | fixed issue with registering not saving on db | fix | 2025-10-22 |
-
----
-
-## Version Links
-
-[1.1.0]: https://github.com/igortacu/FinancialAdvisor/compare/v1.0.0...v1.1.0
-[1.0.1]: https://github.com/igortacu/FinancialAdvisor/compare/v1.0.0...v1.0.1
-[1.0.0]: https://github.com/igortacu/FinancialAdvisor/releases/tag/v1.0.0
