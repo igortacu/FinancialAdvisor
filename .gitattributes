@@ -1,1 +1,2 @@
 TestingPurposes/Nikita/Classifier/category_classifier.pth filter=lfs diff=lfs merge=lfs -text
+Forecast/Classify/category_classifier.pth filter=lfs diff=lfs merge=lfs -text
