@@ -1,0 +1,5 @@
+torch>=2.4,<3.0
+tiktoken>=0.5.2,<1.0
+fastapi
+uvicorn
+pydantic
