@@ -603,9 +603,57 @@ export default function Transactions() {
       loadPage(false);
     }
   }
+async function addQuickExpense() {
+  if (!userId) {
+    Alert.alert("Sign in required", "Log in to add a quick expense.");
+    return;
+  }
+
+  const amount = -50; // default quick expense
+  const category = "General";
+  const merchant = "Quick Expense";
+
+  const row: Record<string, any> = {
+    [COLS.user_id]: userId,
+    [COLS.date]: new Date().toISOString(),
+    [COLS.currency]: "MDL",
+    [COLS.net]: amount,
+    [COLS.expense]: Math.abs(amount),
+    [COLS.income]: 0,
+    [COLS.merchant]: merchant,
+    [COLS.name]: merchant,
+    [COLS.category]: category,
+    [COLS.meta]: { quick: true },
+  };
+
+  try {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .insert(row)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    setList((p) => [mapDBToUI(data), ...p]);
+
+    AnalyticsService.track("AddTransaction", {
+      amount: Math.abs(amount),
+      currency: "MDL",
+      category,
+      method: "quick_add",
+    });
+
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  } catch (e: any) {
+    console.error("Quick add failed:", e);
+    Alert.alert("Error", e?.message ?? "Unknown error");
+  }
+}
 
   return (
-    <View style={[s.root, { paddingTop: insets.top + 6 }]}>
+    <>
+     <View style={[s.root, { paddingTop: insets.top + 6 }]}>
       {/* Header */}
       <Animated.View entering={FadeInDown.duration(360)} style={s.headerWrap}>
         <Text style={s.h1}>Transactions</Text>
@@ -962,6 +1010,34 @@ export default function Transactions() {
         </View>
       </Modal>
     </View>
+    {/* Quick Add Expense */}
+<Pressable
+  onPress={addQuickExpense}
+  style={({ pressed }) => [
+    {
+      position: "absolute",
+      bottom: 30,
+      right: 20,
+      backgroundColor: "#f87171",
+      borderRadius: 28,
+      width: 56,
+      height: 56,
+      justifyContent: "center",
+      alignItems: "center",
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.3,
+      shadowRadius: 4,
+      elevation: 5,
+    },
+    pressed && { opacity: 0.8 },
+  ]}
+>
+  <Ionicons name="remove-circle-outline" size={28} color="#fff" />
+</Pressable>
+
+    </>
+   
   );
 }
 
