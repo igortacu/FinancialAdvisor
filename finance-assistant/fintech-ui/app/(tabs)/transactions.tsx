@@ -158,6 +158,8 @@ export default function Transactions() {
   const [forecastLoading, setForecastLoading] = React.useState(false);
   const [forecastError, setForecastError] = React.useState<string | null>(null);
 
+
+
   const monthLabels = React.useMemo(() => {
     if (!forecastVals || forecastVals.length === 0) return [] as string[];
     const labels: string[] = [];
@@ -184,6 +186,9 @@ export default function Transactions() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   });
 
+
+
+
   // ---- computed
   const filtered = React.useMemo(() => {
     const [y, m] = month.split("-").map(Number);
@@ -196,6 +201,17 @@ export default function Transactions() {
       return inMonth && inCat;
     });
   }, [list, activeCat, month]);
+
+
+    const stats = React.useMemo(() => {
+    let exp = 0, inc = 0;
+    filtered.forEach(t => {
+      if (t.amount < 0) exp += t.amount;
+      else inc += t.amount;
+    });
+    return { exp, inc };
+  }, [filtered]);
+
 
   const totalToday = React.useMemo(() => {
     const today = new Date().toDateString();
@@ -641,6 +657,15 @@ export default function Transactions() {
           <Text style={s.kpiLabel}>Count</Text>
           <Text style={s.kpiValue}>{countAll}</Text>
           <Text style={s.kpiSub}>Filtered</Text>
+        </Card>
+        <Card style={[s.kpiCard, { flex: 1 }]}>
+          <Text style={s.kpiLabel}>Expenses</Text>
+          <Text style={s.kpiValue}>{fmtMDL(stats.exp)}</Text>
+        </Card>
+
+        <Card style={[s.kpiCard, { flex: 1 }]}>
+          <Text style={s.kpiLabel}>Income</Text>
+          <Text style={s.kpiValue}>{fmtMDL(stats.inc)}</Text>
         </Card>
       </Animated.View>
 
