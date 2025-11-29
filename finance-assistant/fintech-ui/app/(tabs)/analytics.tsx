@@ -14,6 +14,9 @@ import {
   TextInput,
   Switch,
   useWindowDimensions,
+  StyleProp,
+  ViewStyle,
+  TextStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInUp } from "react-native-reanimated";
@@ -36,6 +39,7 @@ import { AnalyticsService } from "@/lib/analytics";
 import { useRouter } from "expo-router";
 import { useForecast } from "@/hooks/useForecast";
 import { useAuth } from "@/store/auth";
+import { analyzeTransaction } from "@/lib/mlApi";
 
 // ---------- helpers ----------
 function formatMoney(val: number, currency: string) {
@@ -141,6 +145,45 @@ const received7dList = [
   { amount: 85, description: "Cash Refund", category: "Return" },
   { amount: 200, description: "Family Transfer", category: "Gift" },
 ];
+
+// ---------- Classification (moved from Transactions) ----------
+const CLASSIFY_API_URL = "http://localhost:8000/classify";
+
+async function classifyTransaction(text: string): Promise<string | null> {
+  try {
+    const res = await fetch(CLASSIFY_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.category;
+  } catch (e) {
+    console.warn("Classification API failed, falling back to local guess", e);
+    return null;
+  }
+}
+
+type Category =
+  | "Groceries"
+  | "Fuel"
+  | "Utilities"
+  | "Health"
+  | "Transport"
+  | "Shopping"
+  | "General";
+
+const guessCategory = (merchant: string): Category => {
+  const m = merchant.toUpperCase();
+  if (/(KAUFLAND|LINELLA|GREEN HILLS|SUPERMARKET|MARKET)/.test(m)) return "Groceries";
+  if (/(LUKOIL|MOL|PETROM|ROMPETROL|VENTO)/.test(m)) return "Fuel";
+  if (/(ORANGE|MOLDTELECOM|DIGI|VODAFONE|MTS)/.test(m)) return "Utilities";
+  if (/(PHARM|APTEKA|FARM)/.test(m)) return "Health";
+  if (/(UBER|YANGO|TAXI|PARK)/.test(m)) return "Transport";
+  if (/(H&M|ZARA|UNIQLO|CCC|LC WAIKIKI)/.test(m)) return "Shopping";
+  return "General";
+};
 
 // ---------- small UI ----------
 function KPI({
@@ -262,7 +305,7 @@ function BreakdownRow({
 }
 
 // ---------- Modal-based MonthDropdown (always above charts) ----------
-import type { StyleProp, ViewStyle, TextStyle } from "react-native";
+// (moved type import to top)
 
 function MonthDropdown({
   value,
@@ -624,12 +667,107 @@ export default function Analytics() {
     }
   }, [monthAlerts, selectedMonth]);
 
+  // --- Classifier state & handlers ---
+  const [merchant, setMerchant] = React.useState<string>("");
+  const [amount, setAmount] = React.useState<string>("");
+  const [category, setCategory] = React.useState<string | null>(null);
+  const [advice, setAdvice] = React.useState<string[]>([]);
+  const [classifying, setClassifying] = React.useState(false);
+  const [analyzing, setAnalyzing] = React.useState(false);
+
+  async function onClassify() {
+    const text = merchant.trim();
+    if (!text) return;
+    setClassifying(true);
+    try {
+      const aiCat = await classifyTransaction(text);
+      setCategory(aiCat ?? guessCategory(text));
+    } finally {
+      setClassifying(false);
+    }
+  }
+
+  async function onAnalyze() {
+    const text = merchant.trim();
+    const amt = Number(amount) || 0;
+    if (!text || !amt) return;
+    setAnalyzing(true);
+    try {
+      const resp = await analyzeTransaction({
+        user_id: user?.id ?? undefined,
+        merchant: text,
+        amount: -Math.abs(amt),
+        currency: "MDL",
+        meta: { source: "analytics" },
+      });
+      setCategory(resp.category || null);
+      setAdvice(resp.advice || []);
+    } catch (e) {
+      console.warn("ML analyze failed", e);
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
   return (
     <ScrollView
       style={[s.root, { paddingTop: insets.top + 6 }]}
       contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 12 }}
       showsVerticalScrollIndicator={false}
     >
+      {/* Classifier & Analysis */}
+      <Card>
+        <Text style={s.h1}>Transaction Classifier</Text>
+        <View style={{ gap: 8 }}>
+          <View style={s.budgetItem}>
+            <Text style={s.budgetLabel}>Merchant</Text>
+            <TextInput
+              style={s.budgetInput}
+              value={merchant}
+              onChangeText={setMerchant}
+              placeholder="e.g. Kaufland"
+            />
+          </View>
+          <View style={s.budgetItem}>
+            <Text style={s.budgetLabel}>Amount (MDL)</Text>
+            <TextInput
+              style={s.budgetInput}
+              keyboardType="numeric"
+              value={amount}
+              onChangeText={setAmount}
+              placeholder="0"
+            />
+          </View>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Pressable
+              onPress={onClassify}
+              style={({ pressed }) => [s.periodButton, pressed && { opacity: 0.9 }]}
+            >
+              <Text style={s.periodButtonText}>Classify</Text>
+            </Pressable>
+            <Pressable
+              onPress={onAnalyze}
+              style={({ pressed }) => [s.periodButton, pressed && { opacity: 0.9 }]}
+            >
+              <Text style={s.periodButtonText}>Analyze (ML)</Text>
+            </Pressable>
+          </View>
+          {classifying ? (
+            <Text style={{ color: "#6B7280" }}>Classifying...</Text>
+          ) : category ? (
+            <Text style={{ fontWeight: "700" }}>Category: {category}</Text>
+          ) : null}
+          {analyzing ? (
+            <Text style={{ color: "#6B7280" }}>Analyzing...</Text>
+          ) : advice && advice.length ? (
+            <View style={{ gap: 4 }}>
+              {advice.map((a, i) => (
+                <Text key={i} style={{ color: "#374151" }}>• {a}</Text>
+              ))}
+            </View>
+          ) : null}
+        </View>
+      </Card>
       {/* KPIs */}
       <Animated.View
         entering={FadeInUp.duration(380)}

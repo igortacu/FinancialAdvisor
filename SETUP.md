@@ -97,6 +97,59 @@ $env:ML_API_CORS="http://localhost:8081,http://127.0.0.1:8081,http://192.168.x.x
 
 ---
 
+## 2a) Classification Model (optional)
+
+Runs a lightweight text-to-category classifier locally. Use it via CLI or a small FastAPI service.
+
+- Location: `Forecast/Classify`
+- Weights file: `Forecast/Classify/category_classifier.pth`
+
+Use the same virtual environment created in step 2 (under `Forecast/.venv`). If you skipped step 2, create and activate it first:
+
+```powershell
+cd .\Forecast
+python -m venv .venv; .venv\Scripts\Activate.ps1
+```
+
+Install dependencies for the classifier:
+
+```powershell
+pip install -r .\Classify\requirements.txt
+```
+
+Get the model weights (`category_classifier.pth`):
+- If tracked with Git LFS: from the repo root, run `git lfs install` once on your machine, then `git lfs pull` to fetch large files.
+- Or train locally: open `Forecast/Classify/TrainClassificationModel.ipynb` and run all cells; it saves the weights (ensure the output path is `Forecast/Classify/category_classifier.pth`).
+- Or download from release/artifact storage (if your team provides a link) and place it at `Forecast/Classify/category_classifier.pth`.
+
+CLI usage (quick test):
+
+```powershell
+cd .\Forecast\Classify
+python classify.py "Starbucks latte"
+```
+
+Run the classification API (FastAPI) on a separate port (e.g., 8092):
+
+```powershell
+cd .\Forecast\Classify
+uvicorn api:app --host 0.0.0.0 --port 8092 --reload
+```
+
+Health check and sample request (PowerShell):
+
+```powershell
+curl.exe -i http://localhost:8092/health
+$body = @{ text = "Netflix monthly subscription" } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri http://localhost:8092/classify -Body $body -ContentType "application/json"
+```
+
+Notes:
+- Torch installs a CPU build by default on Windows. For GPU/CUDA builds, follow: https://pytorch.org/get-started/locally/
+- If you keep the weights in Git LFS, teammates need to run `git lfs install` (once) and `git lfs pull` to retrieve them.
+
+---
+
 ## 3) Frontend app (Expo)
 
 From the `fintech-ui` folder:
