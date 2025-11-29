@@ -151,6 +151,8 @@ export default function Transactions() {
   // ---- forecast
   const [forecastVals, setForecastVals] = React.useState<number[] | null>(null);
   const [forecastLoading, setForecastLoading] = React.useState(false);
+  const [forecastError, setForecastError] = React.useState<string | null>(null);
+
   const monthLabels = React.useMemo(() => {
     if (!forecastVals || forecastVals.length === 0) return [] as string[];
     const labels: string[] = [];
@@ -228,6 +230,7 @@ export default function Transactions() {
   React.useEffect(() => {
     let cancelled = false;
     async function run() {
+      setForecastError(null);
       // Always show something: seed fallback first
       setForecastVals(genFallbackForecast());
 
@@ -243,8 +246,11 @@ export default function Transactions() {
           setForecastVals(vals);
         }
       } catch (e) {
-        console.warn("Forecast fetch failed", e);
-        if (!cancelled) setForecastVals(genFallbackForecast());
+          console.warn("Forecast fetch failed", e);
+          if (!cancelled) {
+            setForecastError("Forecast unavailable (API error). Showing demo data.");
+            setForecastVals(genFallbackForecast());
+          }
       } finally {
         if (!cancelled) setForecastLoading(false);
       }
@@ -681,6 +687,24 @@ export default function Transactions() {
                   Charts unavailable in this build. Values: {forecastVals.join(", ")}
                 </Text>
               )}
+                          {forecastError && (
+                            <>
+                                          <Text style={{ 
+                color: "#ef4444",
+                marginTop: 6,
+                fontSize: 12,
+                textAlign: "center"
+              }}>
+                {forecastError}
+              </Text>
+              <Pressable onPress={() => setUserId((u) => u && `${u}`)}>
+              <Text style={{ color: "#246BFD", textAlign: "center" }}>
+                Retry
+              </Text>
+            </Pressable>
+          </>
+            )}
+
               {/* Simple legend of values */}
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
                 {forecastVals.map((v, i) => (

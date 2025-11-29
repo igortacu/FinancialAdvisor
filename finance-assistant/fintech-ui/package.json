@@ -3,7 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "EXPO_USE_DEV_SERVER=true expo start --go --clear",
+    "start": "cross-env EXPO_USE_DEV_SERVER=true expo start --go --clear",
     "start:lan": "EXPO_USE_DEV_SERVER=true expo start --lan --go --clear",
     "start:tunnel": "EXPO_USE_DEV_SERVER=true expo start --tunnel --go --clear",
     "reset-project": "node ./scripts/reset-project.js",
@@ -73,6 +73,7 @@
     "@types/jest": "^30.0.0",
     "@types/react": "~19.1.0",
     "@types/react-native": "^0.72.8",
+    "cross-env": "^10.1.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "jest": "^30.2.0",
