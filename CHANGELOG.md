@@ -10,7 +10,7 @@ We released [v1.2.0](https://github.com/igortacu/FinancialAdvisor/releases/tag/v
 
 ### Features
 
-#### Transaction Classification - [PR #106](https://github.com/igortacu/FinancialAdvisor/pull/106)
+#### Transaction Classification - [PR #106](https://github.com/igortacu/FinancialAdvisor/pull/106) - @Nichita111
 - **ML Pipeline Integration**: Implemented the classification model into the data processing pipeline for real-time transaction analysis
 - **Smart Categorization**: Added regex-based merchant categorization for Groceries, Fuel, Utilities, and more
 - **Risk Assessment**: Introduced heuristic-based risk analysis to flag high-value or unusual transactions
@@ -18,12 +18,29 @@ We released [v1.2.0](https://github.com/igortacu/FinancialAdvisor/releases/tag/v
 - **LLM Weights**: Added new weights for the Large Language Model to improve categorization accuracy
 - **Documentation**: Updated documentation for the classification system
 
-#### Forecast Integration - [PR #104](https://github.com/igortacu/FinancialAdvisor/pull/104)
+#### Forecast Integration - [PR #104](https://github.com/igortacu/FinancialAdvisor/pull/104) - @inap235
 - **Python ML Backend**: Integrated a Python-based machine learning model to forecast user spending
 - **New API Service**: Added a FastAPI server (`Forecast/ml_api.py`) for serving predictions
 - **Supabase Integration**: Added support for fetching training data from Supabase
 - **Analytics Visualization**: Added "Cash Flow Forecast" chart to Analytics screen
 - **Dynamic Time Periods**: Added support for 1M, 3M, 6M, and 1Y forecast views
+
+#### Insights Fix - [PR #103](https://github.com/igortacu/FinancialAdvisor/pull/103) - @inap235
+- **Market Insights**: Fixed market insights display and data fetching
+- **Portfolio Growth**: Fixed portfolio growth to show data for different domains
+- **Monthly Mix**: Added monthly mix with savings and spendings visualization
+- **Performance**: Improved speed for fetching data from Finnhub
+- **Tests**: Added tests for insights page
+
+### Infrastructure
+
+#### CI/CD Pipeline - [PR #76](https://github.com/igortacu/FinancialAdvisor/pull/76), [PR #101](https://github.com/igortacu/FinancialAdvisor/pull/101), [PR #102](https://github.com/igortacu/FinancialAdvisor/pull/102) - @igortacu
+- **GitHub Actions Workflow**: Implemented automated CI/CD pipeline for testing and deployment
+- **ESLint Integration**: Added automated code quality checks on every PR
+- **TypeScript Verification**: Set up TypeScript compilation checks in CI
+- **Husky Pre-commit Hooks**: Added local development quality gates
+- **CI Fixes**: Fixed npm install and husky skip in CI environment
+- **PR/Issue Templates**: Added professional templates for PRs and issues
 
 ---
 
@@ -33,7 +50,7 @@ We released [v1.1.0](https://github.com/igortacu/FinancialAdvisor/releases/tag/v
 
 ### Features
 
-#### Investments Page Overhaul - [PR #73](https://github.com/igortacu/FinancialAdvisor/pull/73)
+#### Investments Page Overhaul - [PR #73](https://github.com/igortacu/FinancialAdvisor/pull/73) - @igortacu
 - **Multi-Brokerage Account Selection**: Added support for connecting to multiple brokerage accounts
   - Interactive Brokers (Stocks & ETFs)
   - Coinbase (Cryptocurrency)
@@ -44,16 +61,16 @@ We released [v1.1.0](https://github.com/igortacu/FinancialAdvisor/releases/tag/v
 - **Yahoo Finance Integration**: Switched from Finnhub to Yahoo Finance API with Supabase proxy
 - **Broker Switch Feature**: Easy switching between connected brokerage accounts
 
-#### Settings Page - [PR #72](https://github.com/igortacu/FinancialAdvisor/pull/72)
+#### Settings Page - [PR #72](https://github.com/igortacu/FinancialAdvisor/pull/72) - @loredanatoredita
 - **Profile Avatar Display**: Fixed avatar image rendering with instant save
 - **Optimistic Updates**: Profile changes save instantly with optimistic UI updates
 
-#### Authentication Improvements - [PR #71](https://github.com/igortacu/FinancialAdvisor/pull/71)
+#### Authentication Improvements - [PR #71](https://github.com/igortacu/FinancialAdvisor/pull/71) - @loredanatoredita
 - **UTF-8 Diacritics Support**: Properly decode UTF-8 characters in JWT tokens
 - **Instant OAuth Login**: Performance improvement by decoding JWT directly
 - **OAuth Callback Handling**: Fixed login redirect issues in AuthProvider
 
-#### Analytics Page - [PR #70](https://github.com/igortacu/FinancialAdvisor/pull/70)
+#### Analytics Page - [PR #70](https://github.com/igortacu/FinancialAdvisor/pull/70) - @loredanatoredita
 - **TypeScript Safety**: Improved type safety across analytics components
 - **Accessibility**: Added accessibility labels to interactive elements
 - **Realistic Mock Data**: Added Q4 mock data for better demonstration
@@ -80,10 +97,10 @@ We released [v1.1.0](https://github.com/igortacu/FinancialAdvisor/releases/tag/v
 
 ### Chores
 
-- **Disabled Registration** - [PR #66](https://github.com/igortacu/FinancialAdvisor/pull/66): Temporarily disabled new user registration
-- **Localization Template** - [PR #61](https://github.com/igortacu/FinancialAdvisor/pull/61): Added currency localization template
-- **Model Integration** - [PR #65](https://github.com/igortacu/FinancialAdvisor/pull/65): FastAPI model server setup
-- **Changelog & Contributions** - [PR #64](https://github.com/igortacu/FinancialAdvisor/pull/64): Added contribution guidelines
+- **Disabled Registration** - [PR #66](https://github.com/igortacu/FinancialAdvisor/pull/66) - @Adelina1905: Temporarily disabled new user registration
+- **Localization Template** - [PR #61](https://github.com/igortacu/FinancialAdvisor/pull/61) - @Adelina1905: Added currency localization template
+- **Model Integration** - [PR #65](https://github.com/igortacu/FinancialAdvisor/pull/65) - @Nichita111: FastAPI model server setup
+- **Changelog & Contributions** - [PR #64](https://github.com/igortacu/FinancialAdvisor/pull/64) - @Adelina1905: Added contribution guidelines
 
 ### Documentation
 
@@ -99,7 +116,7 @@ We released [v1.0.1](https://github.com/igortacu/FinancialAdvisor/releases/tag/v
 
 ### Bug Fixes
 
-- **Registration Alert** - [PR #63](https://github.com/igortacu/FinancialAdvisor/pull/63): Fixed `handleRegistration()` alert to work on web and mobile
+- **Registration Alert** - [PR #63](https://github.com/igortacu/FinancialAdvisor/pull/63) - @Adelina1905: Fixed `handleRegistration()` alert to work on web and mobile
 - **Authentication Updates**: Improved commit handling for auth flow
 
 ---
