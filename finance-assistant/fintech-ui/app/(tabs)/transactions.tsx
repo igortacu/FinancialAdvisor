@@ -95,6 +95,11 @@ const guessCategory = (merchant: string): Category => {
   if (/(PHARM|APTEKA|FARM)/.test(m)) return "Health";
   if (/(UBER|YANGO|TAXI|PARK)/.test(m)) return "Transport";
   if (/(H&M|ZARA|UNIQLO|CCC|LC WAIKIKI)/.test(m)) return "Shopping";
+
+  if (/(STARBUCKS|COFFEE|CAFE)/.test(m)) return "General";
+  if (/(GYM|FITNESS|SPORT)/.test(m)) return "Health";
+  if (/(BOLT|YANDEX|TAXI)/.test(m)) return "Transport";
+
   return "General";
 };
 
@@ -151,6 +156,10 @@ export default function Transactions() {
   // ---- forecast
   const [forecastVals, setForecastVals] = React.useState<number[] | null>(null);
   const [forecastLoading, setForecastLoading] = React.useState(false);
+  const [forecastError, setForecastError] = React.useState<string | null>(null);
+
+
+
   const monthLabels = React.useMemo(() => {
     if (!forecastVals || forecastVals.length === 0) return [] as string[];
     const labels: string[] = [];
@@ -177,6 +186,9 @@ export default function Transactions() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   });
 
+
+
+
   // ---- computed
   const filtered = React.useMemo(() => {
     const [y, m] = month.split("-").map(Number);
@@ -189,6 +201,17 @@ export default function Transactions() {
       return inMonth && inCat;
     });
   }, [list, activeCat, month]);
+
+
+    const stats = React.useMemo(() => {
+    let exp = 0, inc = 0;
+    filtered.forEach(t => {
+      if (t.amount < 0) exp += t.amount;
+      else inc += t.amount;
+    });
+    return { exp, inc };
+  }, [filtered]);
+
 
   const totalToday = React.useMemo(() => {
     const today = new Date().toDateString();
@@ -228,6 +251,7 @@ export default function Transactions() {
   React.useEffect(() => {
     let cancelled = false;
     async function run() {
+      setForecastError(null);
       // Always show something: seed fallback first
       setForecastVals(genFallbackForecast());
 
@@ -243,8 +267,11 @@ export default function Transactions() {
           setForecastVals(vals);
         }
       } catch (e) {
-        console.warn("Forecast fetch failed", e);
-        if (!cancelled) setForecastVals(genFallbackForecast());
+          console.warn("Forecast fetch failed", e);
+          if (!cancelled) {
+            setForecastError("Forecast unavailable (API error). Showing demo data.");
+            setForecastVals(genFallbackForecast());
+          }
       } finally {
         if (!cancelled) setForecastLoading(false);
       }
@@ -631,6 +658,15 @@ export default function Transactions() {
           <Text style={s.kpiValue}>{countAll}</Text>
           <Text style={s.kpiSub}>Filtered</Text>
         </Card>
+        <Card style={[s.kpiCard, { flex: 1 }]}>
+          <Text style={s.kpiLabel}>Expenses</Text>
+          <Text style={s.kpiValue}>{fmtMDL(stats.exp)}</Text>
+        </Card>
+
+        <Card style={[s.kpiCard, { flex: 1 }]}>
+          <Text style={s.kpiLabel}>Income</Text>
+          <Text style={s.kpiValue}>{fmtMDL(stats.inc)}</Text>
+        </Card>
       </Animated.View>
 
       {/* Forecast (demo) */}
@@ -681,6 +717,24 @@ export default function Transactions() {
                   Charts unavailable in this build. Values: {forecastVals.join(", ")}
                 </Text>
               )}
+                          {forecastError && (
+                            <>
+                                          <Text style={{ 
+                color: "#ef4444",
+                marginTop: 6,
+                fontSize: 12,
+                textAlign: "center"
+              }}>
+                {forecastError}
+              </Text>
+              <Pressable onPress={() => setUserId((u) => u && `${u}`)}>
+              <Text style={{ color: "#246BFD", textAlign: "center" }}>
+                Retry
+              </Text>
+            </Pressable>
+          </>
+            )}
+
               {/* Simple legend of values */}
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
                 {forecastVals.map((v, i) => (
