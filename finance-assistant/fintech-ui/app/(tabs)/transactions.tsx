@@ -95,6 +95,11 @@ const guessCategory = (merchant: string): Category => {
   if (/(PHARM|APTEKA|FARM)/.test(m)) return "Health";
   if (/(UBER|YANGO|TAXI|PARK)/.test(m)) return "Transport";
   if (/(H&M|ZARA|UNIQLO|CCC|LC WAIKIKI)/.test(m)) return "Shopping";
+
+  if (/(STARBUCKS|COFFEE|CAFE)/.test(m)) return "General";
+  if (/(GYM|FITNESS|SPORT)/.test(m)) return "Health";
+  if (/(BOLT|YANDEX|TAXI)/.test(m)) return "Transport";
+
   return "General";
 };
 
